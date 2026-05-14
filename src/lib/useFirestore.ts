@@ -22,14 +22,19 @@ interface FirestoreErrorInfo {
 }
 
 const getApiUrl = (path: string) => {
-  // If running on github.io, use absolute backend URL
+  // No GitHub Pages, usamos a URL absoluta definida nas constantes
   if (window.location.hostname.includes('github.io')) {
     const url = `${BACKEND_URL}${path}`;
-    console.log(`[API] calling remote backend: ${url}`);
     return url;
   }
-  console.log(`[API] calling local backend: ${path}`);
-  return path;
+  
+  // No ambiente de preview do AI Studio, o app pode estar rodando em uma sub-rota como /Sistema-visitas/
+  // Vamos usar caminhos relativos ao invés de URL absoluta para evitar problemas de CORS e Proxy
+  const basePath = window.location.pathname.split('/api')[0].replace(/\/$/, '');
+  const url = `${basePath}${path}`;
+  
+  console.log(`[API Request] ${url}`);
+  return url;
 };
 
 export function handleFirestoreError(error: unknown, operationType: OperationType, path: string | null, authUser: User | null) {

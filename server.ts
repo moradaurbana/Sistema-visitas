@@ -163,27 +163,37 @@ async function startServer() {
     next();
   });
 
-  // CORS - should be broad for AIS preview and GitHub Pages
+  // CORS configuration
   app.use(cors({
     origin: '*',
     methods: ['GET', 'POST', 'PATCH', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'apikey']
+    allowedHeaders: ['Content-Type', 'Authorization', 'apikey'],
+    credentials: true
   }));
   
   // Explicit OPTIONS handler for preflights
-  app.options('*', cors());
+  app.options('*', (req, res) => {
+    res.header('Access-Control-Allow-Origin', '*');
+    res.header('Access-Control-Allow-Methods', 'GET, POST, PATCH, DELETE, OPTIONS');
+    res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, apikey');
+    res.sendStatus(200);
+  });
 
   app.use(express.json());
 
   // Test Route
-  app.get('/api/health', (req, res) => {
+  const healthHandler = (req: express.Request, res: express.Response) => {
     res.json({ 
       status: 'ok', 
       whatsappConfigured: !!(process.env.EVOLUTION_API_URL && process.env.EVOLUTION_API_KEY && process.env.EVOLUTION_INSTANCE_NAME)
     });
-  });
+  };
 
-  // Evolution API Whatsapp Route - Define both with and without trailing slash for robustness
+  app.get('/api/health', healthHandler);
+  app.get('/api/health/', healthHandler);
+  app.get('/Sistema-visitas/api/health', healthHandler);
+
+  // Evolution API Whatsapp Route
   const whatsappHandler = async (req: express.Request, res: express.Response) => {
     try {
       const { phone, message } = req.body;
@@ -196,12 +206,10 @@ async function startServer() {
         console.log("[WhatsApp] Attempted to send but credentials are missing in Environment Variables.");
         return res.status(400).json({ 
           success: false, 
-          issue: "Evolution API environment variables are not configured. Please set them in Settings > Environment Variables." 
+          issue: "Evolution API environment variables are not configured." 
         });
       }
 
-      const endpoint = `${apiUrl}/message/sendText/${instanceName}`;
-      
       let cleanPhone = phone.replace(/\D/g, '');
       if (cleanPhone.length >= 10 && cleanPhone.length <= 11 && !cleanPhone.startsWith('55')) {
         cleanPhone = '55' + cleanPhone;
@@ -209,7 +217,7 @@ async function startServer() {
 
       console.log(`[WhatsApp] Sending to ${cleanPhone}...`);
 
-      const response = await fetch(endpoint, {
+      const response = await fetch(`${apiUrl}/message/sendText/${instanceName}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -217,47 +225,30 @@ async function startServer() {
         },
         body: JSON.stringify({
           number: cleanPhone,
-          options: {
-            delay: 1200,
-            presence: 'composing'
-          },
+          options: { delay: 1200, presence: 'composing' },
           text: message
         })
       });
 
       if (!response.ok) {
         const errInfo = await response.text();
-        console.error(`[WhatsApp] Evolution API error for ${cleanPhone}:`, errInfo);
-        return res.status(response.status).json({ success: false, issue: `Evolution API error: ${response.status}`, details: errInfo });
+        console.error(`[WhatsApp] Evolution API error:`, errInfo);
+        return res.status(response.status).json({ success: false, details: errInfo });
       }
 
       const data = await response.json();
-      console.log(`[WhatsApp] Success sending to ${cleanPhone}`);
       res.json({ success: true, data });
     } catch (error: any) {
-      console.log("WhatsApp Send Result:", String(error).replace(/error/gi, 'issue'));
+      console.log("WhatsApp Send Result Error:", error);
       res.status(500).json({ success: false, issue: error.message });
     }
   };
 
-  // Define routes normally and with platform base path prefix if applicable
-  const apiPaths = [
-    '/api/send-whatsapp',
-    '/api/send-whatsapp/',
-    '/Sistema-visitas/api/send-whatsapp',
-    '/Sistema-visitas/api/send-whatsapp/'
-  ];
-  
-  apiPaths.forEach(path => {
-    app.post(path, whatsappHandler);
-  });
-
-  app.get(['/api/health', '/Sistema-visitas/api/health'], (req, res) => {
-    res.json({ 
-      status: 'ok', 
-      whatsappConfigured: !!(process.env.EVOLUTION_API_URL && process.env.EVOLUTION_API_KEY && process.env.EVOLUTION_INSTANCE_NAME)
-    });
-  });
+  // Register the route for multiple common paths
+  app.post('/api/send-whatsapp', whatsappHandler);
+  app.post('/api/send-whatsapp/', whatsappHandler);
+  app.post('/Sistema-visitas/api/send-whatsapp', whatsappHandler);
+  app.post('/Sistema-visitas/api/send-whatsapp/', whatsappHandler);
 
   // Vite middleware for development
   if (process.env.NODE_ENV !== "production") {
