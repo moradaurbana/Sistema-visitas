@@ -148,7 +148,10 @@ async function sendWhatsapp(phone, message) {
   const instanceName = process.env.EVOLUTION_INSTANCE_NAME;
   if (!apiUrl || !apiKey || !instanceName) return;
   const endpoint = `${apiUrl}/message/sendText/${instanceName}`;
-  const cleanPhone = phone.replace(/\D/g, "");
+  let cleanPhone = phone.replace(/\D/g, "");
+  if (cleanPhone.length >= 10 && cleanPhone.length <= 11 && !cleanPhone.startsWith("55")) {
+    cleanPhone = "55" + cleanPhone;
+  }
   await fetch(endpoint, {
     method: "POST",
     headers: {
@@ -174,10 +177,15 @@ async function startServer() {
       const apiKey = process.env.EVOLUTION_API_KEY;
       const instanceName = process.env.EVOLUTION_INSTANCE_NAME;
       if (!apiUrl || !apiKey || !instanceName) {
-        throw new Error("Evolution API environment variables are not configured.");
+        console.log("[WhatsApp] Attempted to send but credentials are missing in Environment Variables.");
+        throw new Error("Evolution API environment variables are not configured. Please set them in Settings > Environment Variables.");
       }
       const endpoint = `${apiUrl}/message/sendText/${instanceName}`;
-      const cleanPhone = phone.replace(/\D/g, "");
+      let cleanPhone = phone.replace(/\D/g, "");
+      if (cleanPhone.length >= 10 && cleanPhone.length <= 11 && !cleanPhone.startsWith("55")) {
+        cleanPhone = "55" + cleanPhone;
+      }
+      console.log(`[WhatsApp] Sending to ${cleanPhone}...`);
       const response = await fetch(endpoint, {
         method: "POST",
         headers: {
@@ -195,9 +203,11 @@ async function startServer() {
       });
       if (!response.ok) {
         const errInfo = await response.text();
+        console.error(`[WhatsApp] Evolution API error for ${cleanPhone}:`, errInfo);
         throw new Error(`Evolution API error: ${response.status} - ${errInfo}`);
       }
       const data = await response.json();
+      console.log(`[WhatsApp] Success sending to ${cleanPhone}`);
       res.json({ success: true, data });
     } catch (error) {
       console.log("WhatsApp Send Result:", String(error).replace(/error/gi, "issue"));
