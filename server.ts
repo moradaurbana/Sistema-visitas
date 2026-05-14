@@ -157,17 +157,15 @@ async function startServer() {
   const app = express();
   const PORT = 3000;
 
-  // 1. Bulletproof CORS & Preflight - MUST BE FIRST
+  // 1. ABSOLUTELY FIRST: Manual CORS & Preflight
   app.use((req, res, next) => {
     const origin = req.headers.origin || "*";
     res.setHeader("Access-Control-Allow-Origin", origin);
-    res.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS");
-    res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization, apikey, Accept, X-Requested-With");
+    res.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
+    res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization, apikey, Accept, Origin, X-Requested-With");
     res.setHeader("Access-Control-Allow-Credentials", "true");
-    res.setHeader("Access-Control-Max-Age", "86400");
-
+    
     if (req.method === "OPTIONS") {
-      console.log(`[CORS] Preflight for ${req.url}`);
       return res.status(200).end();
     }
     next();
@@ -176,41 +174,30 @@ async function startServer() {
   // 2. Body Parsing
   app.use(express.json());
 
-  // 3. Central Logging
+  // 3. Logging
   app.use((req, res, next) => {
     if (req.url.includes('/api/')) {
-      console.log(`[API-Request] ${req.method} ${req.url}`);
+      console.log(`${new Date().toISOString()} | ${req.method} ${req.url}`);
     }
     next();
   });
 
-  // 4. API Routes
-  const healthHandler = (req: express.Request, res: express.Response) => {
-    res.json({ status: "ok", time: new Date().toISOString(), whatsapp: !!process.env.EVOLUTION_API_URL });
-  };
-
+  // 4. API HANDLERS
   const whatsappHandler = async (req: express.Request, res: express.Response) => {
-    const phone = req.body?.phone;
-    const message = req.body?.message;
-    
-    console.log(`[WhatsApp-API] Processing request for: ${phone}`);
-    
+    const { phone, message } = req.body;
     try {
       const apiUrl = process.env.EVOLUTION_API_URL;
       const apiKey = process.env.EVOLUTION_API_KEY;
       const instanceName = process.env.EVOLUTION_INSTANCE_NAME;
 
       if (!phone || !message || !apiUrl || !apiKey || !instanceName) {
-        console.log("[WhatsApp-API] Validation failed: missing parameters or server config");
-        return res.status(400).json({ success: false, error: "Missing parameters or server configuration" });
+        return res.status(400).json({ success: false, error: "Missing config or params" });
       }
 
       let cleanPhone = phone.replace(/\D/g, "");
       if (cleanPhone.length >= 10 && cleanPhone.length <= 11 && !cleanPhone.startsWith("55")) {
         cleanPhone = "55" + cleanPhone;
       }
-
-      console.log(`[WhatsApp-API] Forwarding to Evolution API: ${cleanPhone}`);
 
       const response = await fetch(`${apiUrl}/message/sendText/${instanceName}`, {
         method: "POST",
@@ -222,27 +209,29 @@ async function startServer() {
         })
       });
 
-      const data = await response.json();
-      console.log(`[WhatsApp-API] evolution response status: ${response.status}`);
-      res.status(response.status).json({ success: response.ok, data });
+      const responseData = await response.json();
+      res.status(response.status).json({ success: response.ok, data: responseData });
     } catch (error: any) {
-      console.error("[WhatsApp-API] Error:", error);
       res.status(500).json({ success: false, error: error.message });
     }
   };
 
-  // Register health check
-  app.get(['/api/health', '/health'], healthHandler);
-  app.get(/.*\/api\/health$/, healthHandler);
-
-  // Register WhatsApp route with patterns to catch any variation (with/without slash, with/without proxy prefix)
-  app.post(['/api/send-whatsapp', '/api/send-whatsapp/'], whatsappHandler);
-  app.post(/.*\/api\/send-whatsapp\/?$/, whatsappHandler);
+  // 5. ROUTE REGISTRATION (API)
+  app.get('/api/health', (req, res) => res.json({ status: "ok", v: "1.0.6" }));
+  app.post('/api/send-whatsapp', whatsappHandler);
   
-  // Also handle some GET/OPTIONS variations if manually hit
-  app.get(/.*\/api\/send-whatsapp\/?$/, (req, res) => res.json({ status: "running", method: req.method }));
+  // Permissive API routes catchers
+  app.all('/api/send-whatsapp', (req, res, next) => {
+    if (req.method === 'POST') return whatsappHandler(req, res);
+    next();
+  });
+  
+  app.all(/.*\/api\/send-whatsapp\/?$/, (req, res, next) => {
+    if (req.method === 'POST') return whatsappHandler(req, res);
+    next();
+  });
 
-  // 5. Static Files & SPA Fallback (Only after API routes)
+  // 6. STATIC FILES & SPA FALLBACK
   if (process.env.NODE_ENV !== "production") {
     const vite = await createViteServer({
       server: { middlewareMode: true },
@@ -253,20 +242,22 @@ async function startServer() {
     const distPath = path.join(process.cwd(), "dist");
     app.use(express.static(distPath));
     app.get("*", (req, res, next) => {
-      // Don't catch /api routes here
       if (req.url.startsWith('/api/')) return next();
       res.sendFile(path.join(distPath, "index.html"));
     });
   }
 
-  // 6. Final 404 for API
+  // 7. FINAL API 404 (with CORS headers guaranteed)
   app.all('/api/*', (req, res) => {
-    console.log(`[API-404] No route for ${req.method} ${req.url}`);
-    res.status(404).json({ error: "API Route Not Found", url: req.url, method: req.method });
+    console.log(`[API-404] ${req.method} ${req.url}`);
+    const origin = req.headers.origin || "*";
+    res.setHeader("Access-Control-Allow-Origin", origin);
+    res.setHeader("Access-Control-Allow-Credentials", "true");
+    res.status(404).json({ error: "Route not found", path: req.path });
   });
 
   app.listen(PORT, "0.0.0.0", () => {
-    console.log(`Server running on http://localhost:${PORT}`);
+    console.log(`Server v1.0.6 running on http://localhost:${PORT}`);
     startScheduler();
   });
 }
