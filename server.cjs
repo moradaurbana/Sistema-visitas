@@ -26,7 +26,6 @@ var import_express = __toESM(require("express"), 1);
 var import_path = __toESM(require("path"), 1);
 var import_vite = require("vite");
 var import_fs = __toESM(require("fs"), 1);
-var import_cors = __toESM(require("cors"), 1);
 async function startScheduler() {
   try {
     const configPath = import_path.default.join(process.cwd(), "firebase-applet-config.json");
@@ -168,18 +167,23 @@ async function sendWhatsapp(phone, message) {
 async function startServer() {
   const app = (0, import_express.default)();
   const PORT = 3e3;
-  app.use((0, import_cors.default)({
-    origin: (origin, callback) => {
-      callback(null, true);
-    },
-    credentials: true,
-    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization", "apikey", "Accept", "X-Requested-With"]
-  }));
+  app.use((req, res, next) => {
+    const origin = req.headers.origin || "*";
+    res.setHeader("Access-Control-Allow-Origin", origin);
+    res.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS");
+    res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization, apikey, Accept, X-Requested-With");
+    res.setHeader("Access-Control-Allow-Credentials", "true");
+    res.setHeader("Access-Control-Max-Age", "86400");
+    if (req.method === "OPTIONS") {
+      console.log(`[CORS] Preflight for ${req.url}`);
+      return res.status(200).end();
+    }
+    next();
+  });
   app.use(import_express.default.json());
   app.use((req, res, next) => {
     if (req.url.includes("/api/")) {
-      console.log(`[CORS-Debug] ${req.method} ${req.url} - Origin: ${req.headers.origin}`);
+      console.log(`[API-Request] ${req.method} ${req.url}`);
     }
     next();
   });
@@ -188,19 +192,21 @@ async function startServer() {
   };
   const whatsappHandler = async (req, res) => {
     const phone = req.body?.phone;
-    console.log(`[WhatsApp-API] Sending to ${phone}`);
+    const message = req.body?.message;
+    console.log(`[WhatsApp-API] Processing request for: ${phone}`);
     try {
-      const { message } = req.body;
       const apiUrl = process.env.EVOLUTION_API_URL;
       const apiKey = process.env.EVOLUTION_API_KEY;
       const instanceName = process.env.EVOLUTION_INSTANCE_NAME;
       if (!phone || !message || !apiUrl || !apiKey || !instanceName) {
+        console.log("[WhatsApp-API] Validation failed: missing parameters or server config");
         return res.status(400).json({ success: false, error: "Missing parameters or server configuration" });
       }
       let cleanPhone = phone.replace(/\D/g, "");
       if (cleanPhone.length >= 10 && cleanPhone.length <= 11 && !cleanPhone.startsWith("55")) {
         cleanPhone = "55" + cleanPhone;
       }
+      console.log(`[WhatsApp-API] Forwarding to Evolution API: ${cleanPhone}`);
       const response = await fetch(`${apiUrl}/message/sendText/${instanceName}`, {
         method: "POST",
         headers: { "Content-Type": "application/json", "apikey": apiKey },
@@ -211,18 +217,18 @@ async function startServer() {
         })
       });
       const data = await response.json();
+      console.log(`[WhatsApp-API] evolution response status: ${response.status}`);
       res.status(response.status).json({ success: response.ok, data });
     } catch (error) {
-      console.error("[WhatsApp-API] Fatal error:", error);
+      console.error("[WhatsApp-API] Error:", error);
       res.status(500).json({ success: false, error: error.message });
     }
   };
-  app.get("/api/health", healthHandler);
-  app.post("/api/send-whatsapp", whatsappHandler);
-  app.all("*/api/send-whatsapp", (req, res) => {
-    if (req.method === "POST") return whatsappHandler(req, res);
-    res.json({ status: "ready" });
-  });
+  app.get(["/api/health", "/health"], healthHandler);
+  app.get(/.*\/api\/health$/, healthHandler);
+  app.post(["/api/send-whatsapp", "/api/send-whatsapp/"], whatsappHandler);
+  app.post(/.*\/api\/send-whatsapp\/?$/, whatsappHandler);
+  app.get(/.*\/api\/send-whatsapp\/?$/, (req, res) => res.json({ status: "running", method: req.method }));
   if (process.env.NODE_ENV !== "production") {
     const vite = await (0, import_vite.createServer)({
       server: { middlewareMode: true },
