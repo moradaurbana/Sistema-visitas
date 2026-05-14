@@ -7,7 +7,7 @@ admin.initializeApp({
   projectId: config.projectId
 });
 
-const db = admin.firestore(admin.app(), config.firestoreDatabaseId);
+const db = admin.firestore();
 
 async function run() {
   try {

@@ -7,14 +7,20 @@ import cors from 'cors';
 async function startScheduler() {
   try {
     const configPath = path.join(process.cwd(), 'firebase-applet-config.json');
-    if (!fs.existsSync(configPath)) {
-      console.log("No firebase config found, skipping scheduler.");
+    let config: any = {};
+    if (fs.existsSync(configPath)) {
+      config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+    }
+    
+    // Prioritize environment variables, fallback to config file
+    const projectId = process.env.VITE_FIREBASE_PROJECT_ID || config.projectId;
+    const dbId = process.env.VITE_FIREBASE_DATABASE_ID || config.firestoreDatabaseId;
+    const apiKey = process.env.VITE_FIREBASE_API_KEY || config.apiKey;
+
+    if (!projectId || !dbId || !apiKey) {
+      console.log("Missing Firebase configuration (Env or JSON). Scheduler will not start.");
       return;
     }
-    const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
-    const projectId = config.projectId;
-    const dbId = config.firestoreDatabaseId;
-    const apiKey = config.apiKey;
 
     const baseUrl = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/${dbId}/documents`;
 
