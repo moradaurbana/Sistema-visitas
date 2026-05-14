@@ -1,6 +1,6 @@
 {
   "name": "Agenda Moderna",
-  "description": "Um sistema de agenda elegante com design estilo Apple e facilidade de lembretes.",
+  "description": "Um sistema de agenda elegante com design estilo Apple com integração WhatsApp para lembretes automáticos.",
   "requestFramePermissions": [],
   "majorCapabilities": [
     "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"

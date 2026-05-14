@@ -143,42 +143,40 @@ async function startServer() {
   const app = express();
   const PORT = 3000;
 
-  // 1. GLOBAL MIDDLEWARE - MUST BE FIRST
-  app.use((req, res, next) => {
-    res.header('Access-Control-Allow-Origin', '*');
-    res.header('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE,OPTIONS');
-    res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization, apikey');
-    if (req.method === 'OPTIONS') {
-      console.log(`[CORS] Handling OPTIONS for ${req.url}`);
-      return res.status(200).end();
-    }
-    next();
-  });
-
+  // 1. HARDENED CORS & MIDDLEWARE - MUST BE FIRST
+  app.use(cors()); // Allow all origins for simplicity in debugging
+  app.options('*', cors());
+  
   app.use(express.json());
 
   // Log all non-options requests
   app.use((req, res, next) => {
-    console.log(`[REQ] ${req.method} ${req.url}`);
+    if (req.method !== 'OPTIONS') {
+      console.log(`[REQ] ${req.method} ${req.url}`);
+    } else {
+       console.log(`[OPTIONS] ${req.url}`);
+    }
     next();
   });
 
-  // 2. API ROUTES
-  app.get('/health', (req, res) => res.json({ status: "alive", v: "1.3.7", prod: isProd }));
-  app.get('/api/health', (req, res) => res.json({ status: "alive", api: true }));
-  app.get('/api/ping', (req, res) => res.send('pong'));
+  // Test route for CORS
+  app.get('/api/test-cors', (req, res) => res.json({ success: true, message: "CORS is working" }));
 
+  // 2. PRIMARY API ROUTES - BEFORE STATIC FILES
+  app.get('/health', (req, res) => res.json({ status: "alive", v: "1.3.9", prod: isProd }));
+  app.get('/api/health', (req, res) => res.json({ status: "alive", api: true }));
+  
   app.post('/api/send-whatsapp', async (req, res) => {
     const { phone, message } = req.body;
-    console.log(`[API] send-whatsapp hit: ${phone}`);
+    console.log(`[API] send-whatsapp processing: ${phone}`);
     
     const apiUrl = process.env.EVOLUTION_API_URL;
     const apiKey = process.env.EVOLUTION_API_KEY;
     const instanceName = process.env.EVOLUTION_INSTANCE_NAME;
 
     if (!phone || !message || !apiUrl || !apiKey || !instanceName) {
-      console.error("[API] Config or params missing");
-      return res.status(400).json({ success: false, error: "Missing config" });
+      console.error("[API] Config missing in environment");
+      return res.status(400).json({ success: false, error: "Servidor não configurado corretamente." });
     }
 
     try {
@@ -201,35 +199,35 @@ async function startServer() {
       let responseData;
       try { responseData = JSON.parse(responseText); } catch(e) { responseData = responseText; }
       
-      console.log(`[API] Evolution Status: ${response.status}`);
+      console.log(`[API] Evolution API Response: ${response.status}`);
       res.status(response.status).json({ success: response.ok, data: responseData });
     } catch (error: any) {
-      console.error("[API] Fatal Error:", error.message);
+      console.error("[API] Internal Proxy Error:", error.message);
       res.status(500).json({ success: false, error: error.message });
     }
   });
 
-  // 3. FRONTEND SERVING
+  // 3. STATIC ASSETS & SPA FALLBACK
   const distPath = path.join(process.cwd(), "dist");
 
   if (isProd) {
-    console.log(`[Server] Production Mode: Serving dist from ${distPath}`);
+    console.log(`[Server] Production Mode: Serving dist folder`);
     app.use(express.static(distPath));
     
-    // Catch-all for SPA - but NOT for /api
+    // SPA Fallback for any non-API route
     app.get('*', (req, res, next) => {
-      if (req.url.startsWith('/api/') || req.url.startsWith('/health')) {
-        return next();
-      }
+      // Safety check: don't serve index.html for missed /api requests
+      if (req.url.startsWith('/api/')) return next();
+
       const indexPath = path.join(distPath, 'index.html');
       if (fs.existsSync(indexPath)) {
         res.sendFile(indexPath);
       } else {
-        res.status(404).send("Front-end index missing.");
+        res.status(404).send("Frontend assets not found.");
       }
     });
   } else {
-    console.log("[Server] Development Mode: Mounting Vite");
+    console.log("[Server] Development Mode: Starting Vite Middleware");
     try {
       const { createServer: createViteServer } = await import('vite');
       const vite = await createViteServer({
@@ -238,12 +236,17 @@ async function startServer() {
       });
       app.use(vite.middlewares);
     } catch(e) {
-      console.error("[Server] Vite mount failed:", e);
+      console.error("[Server] Critical: Failed to start Vite", e);
     }
   }
 
+  // Final 404 for truly unhandled routes (likely missed API calls)
+  app.use((req, res) => {
+    res.status(404).json({ error: "Route not found", path: req.url });
+  });
+
   app.listen(PORT, "0.0.0.0", () => {
-    console.log(`[Server] Agenda Moderna v1.3.7 listening on 0.0.0.0:${PORT}`);
+    console.log(`[Server] Agenda Moderna v1.3.8 active on port ${PORT}`);
     startScheduler();
   });
 }
