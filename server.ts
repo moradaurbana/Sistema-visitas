@@ -133,7 +133,11 @@ async function sendWhatsapp(phone: string, message: string) {
   if (!apiUrl || !apiKey || !instanceName) return;
 
   const endpoint = `${apiUrl}/message/sendText/${instanceName}`;
-  const cleanPhone = phone.replace(/\D/g, '');
+  
+  let cleanPhone = phone.replace(/\D/g, '');
+  if (cleanPhone.length >= 10 && cleanPhone.length <= 11 && !cleanPhone.startsWith('55')) {
+    cleanPhone = '55' + cleanPhone;
+  }
 
   await fetch(endpoint, {
     method: 'POST',
@@ -156,7 +160,7 @@ async function startServer() {
   app.use(cors()); // Enable CORS for ALL origins (simplest for now)
   app.use(express.json());
 
-  // Evolution API Whatsapp Route
+// Evolution API Whatsapp Route
   app.post('/api/send-whatsapp', async (req, res) => {
     try {
       const { phone, message } = req.body;
@@ -166,14 +170,22 @@ async function startServer() {
       const instanceName = process.env.EVOLUTION_INSTANCE_NAME;
 
       if (!apiUrl || !apiKey || !instanceName) {
-        throw new Error("Evolution API environment variables are not configured.");
+        console.log("[WhatsApp] Attempted to send but credentials are missing in Environment Variables.");
+        throw new Error("Evolution API environment variables are not configured. Please set them in Settings > Environment Variables.");
       }
 
       const endpoint = `${apiUrl}/message/sendText/${instanceName}`;
       
       // Evolution API requires a specific phone number format (with country code)
-      // Remove any non-numeric characters from the phone number
-      const cleanPhone = phone.replace(/\D/g, '');
+      // Remove any non-numeric characters
+      let cleanPhone = phone.replace(/\D/g, '');
+      
+      // Basic auto-fix for Brazilian numbers if country code is missing
+      if (cleanPhone.length >= 10 && cleanPhone.length <= 11 && !cleanPhone.startsWith('55')) {
+        cleanPhone = '55' + cleanPhone;
+      }
+
+      console.log(`[WhatsApp] Sending to ${cleanPhone}...`);
 
       const response = await fetch(endpoint, {
         method: 'POST',
@@ -193,10 +205,12 @@ async function startServer() {
 
       if (!response.ok) {
         const errInfo = await response.text();
+        console.error(`[WhatsApp] Evolution API error for ${cleanPhone}:`, errInfo);
         throw new Error(`Evolution API error: ${response.status} - ${errInfo}`);
       }
 
       const data = await response.json();
+      console.log(`[WhatsApp] Success sending to ${cleanPhone}`);
       res.json({ success: true, data });
     } catch (error: any) {
       console.log("WhatsApp Send Result:", String(error).replace(/error/gi, 'issue'));
