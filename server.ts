@@ -157,44 +157,42 @@ async function startServer() {
   const app = express();
   const PORT = 3000;
 
+  // CORS & Preflight handling - MUST BE FIRST
+  app.all('*', (req, res, next) => {
+    const origin = req.headers.origin || '*';
+    res.header('Access-Control-Allow-Origin', origin);
+    res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
+    res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, apikey, Accept, X-Requested-With');
+    res.header('Access-Control-Allow-Credentials', 'true');
+    
+    if (req.method === 'OPTIONS') {
+      return res.status(200).end();
+    }
+    next();
+  });
+
+  app.use(express.json());
+
   // Logging middleware
   app.use((req, res, next) => {
     console.log(`[Server] ${req.method} ${req.url} from ${req.headers.origin}`);
     next();
   });
 
-  // CORS configuration
-  app.use(cors({
-    origin: '*',
-    methods: ['GET', 'POST', 'PATCH', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'apikey'],
-    credentials: true
-  }));
-  
-  // Explicit OPTIONS handler for preflights
-  app.options('*', (req, res) => {
-    res.header('Access-Control-Allow-Origin', '*');
-    res.header('Access-Control-Allow-Methods', 'GET, POST, PATCH, DELETE, OPTIONS');
-    res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, apikey');
-    res.sendStatus(200);
-  });
-
-  app.use(express.json());
-
-  // Test Route
+  // Test Routes
   const healthHandler = (req: express.Request, res: express.Response) => {
     res.json({ 
       status: 'ok', 
+      time: new Date().toISOString(),
       whatsappConfigured: !!(process.env.EVOLUTION_API_URL && process.env.EVOLUTION_API_KEY && process.env.EVOLUTION_INSTANCE_NAME)
     });
   };
 
-  app.get('/api/health', healthHandler);
-  app.get('/api/health/', healthHandler);
-  app.get('/Sistema-visitas/api/health', healthHandler);
+  app.get(['/api/health', '/api/health/', '*/api/health'], healthHandler);
 
   // Evolution API Whatsapp Route
   const whatsappHandler = async (req: express.Request, res: express.Response) => {
+    console.log(`[Server] Handling WhatsApp request for ${req.body.phone}`);
     try {
       const { phone, message } = req.body;
       
@@ -244,11 +242,9 @@ async function startServer() {
     }
   };
 
-  // Register the route for multiple common paths
-  app.post('/api/send-whatsapp', whatsappHandler);
-  app.post('/api/send-whatsapp/', whatsappHandler);
-  app.post('/Sistema-visitas/api/send-whatsapp', whatsappHandler);
-  app.post('/Sistema-visitas/api/send-whatsapp/', whatsappHandler);
+  // Register the route with multiple variations including wildcards to catch possible proxy rewrites
+  app.post(['/api/send-whatsapp', '/api/send-whatsapp/', '*/api/send-whatsapp'], whatsappHandler);
+  app.get(['/api/send-whatsapp', '*/api/send-whatsapp'], (req, res) => res.json({ message: "Use POST to send messages" }));
 
   // Vite middleware for development
   if (process.env.NODE_ENV !== "production") {

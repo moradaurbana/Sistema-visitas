@@ -22,18 +22,20 @@ interface FirestoreErrorInfo {
 }
 
 const getApiUrl = (path: string) => {
-  // No GitHub Pages, usamos a URL absoluta definida nas constantes
+  // Se estiver rodando no github.io, use a URL absoluta do backend
   if (window.location.hostname.includes('github.io')) {
-    const url = `${BACKEND_URL}${path}`;
+    const cleanPath = path.startsWith('/') ? path : `/${path}`;
+    const url = `${BACKEND_URL}${cleanPath}`;
+    console.log(`[API Cross-Origin] Calling: ${url}`);
     return url;
   }
   
-  // No ambiente de preview do AI Studio, o app pode estar rodando em uma sub-rota como /Sistema-visitas/
-  // Vamos usar caminhos relativos ao invés de URL absoluta para evitar problemas de CORS e Proxy
+  // No ambiente de preview do AI Studio
   const basePath = window.location.pathname.split('/api')[0].replace(/\/$/, '');
-  const url = `${basePath}${path}`;
+  const cleanPath = path.startsWith('/') ? path : `/${path}`;
+  const url = `${basePath}${cleanPath}`;
   
-  console.log(`[API Request] ${url}`);
+  console.log(`[API Local] Request: ${url}`);
   return url;
 };
 
