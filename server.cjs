@@ -26,20 +26,29 @@ var import_express = __toESM(require("express"), 1);
 var import_path = __toESM(require("path"), 1);
 var import_vite = require("vite");
 var import_fs = __toESM(require("fs"), 1);
+var import_cors = __toESM(require("cors"), 1);
 async function startScheduler() {
   try {
     const configPath = import_path.default.join(process.cwd(), "firebase-applet-config.json");
-    if (!import_fs.default.existsSync(configPath)) {
-      console.log("No firebase config found, skipping scheduler.");
+    let config = {};
+    if (import_fs.default.existsSync(configPath)) {
+      config = JSON.parse(import_fs.default.readFileSync(configPath, "utf8"));
+    }
+    const projectId = process.env.VITE_FIREBASE_PROJECT_ID || config.projectId;
+    const dbId = process.env.VITE_FIREBASE_DATABASE_ID || config.firestoreDatabaseId;
+    const apiKey = process.env.VITE_FIREBASE_API_KEY || config.apiKey;
+    if (!projectId || !dbId || !apiKey) {
+      console.log("Missing Firebase configuration (Env or JSON). Scheduler will not start.");
       return;
     }
-    const config = JSON.parse(import_fs.default.readFileSync(configPath, "utf8"));
-    const projectId = config.projectId;
-    const dbId = config.firestoreDatabaseId;
-    const apiKey = config.apiKey;
     const baseUrl = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/${dbId}/documents`;
     setInterval(async () => {
+      console.log(`[Scheduler] Heartbeat at ${(/* @__PURE__ */ new Date()).toISOString()}`);
       try {
+        if (!process.env.EVOLUTION_API_URL || !process.env.EVOLUTION_API_KEY || !process.env.EVOLUTION_INSTANCE_NAME) {
+          console.log("[Scheduler] Missing WhatsApp configuration in environment variables. Reminders will not be sent.");
+          return;
+        }
         const res = await fetch(`${baseUrl}/appointments?key=${apiKey}`);
         if (!res.ok) {
           return;
@@ -156,6 +165,7 @@ async function sendWhatsapp(phone, message) {
 async function startServer() {
   const app = (0, import_express.default)();
   const PORT = 3e3;
+  app.use((0, import_cors.default)());
   app.use(import_express.default.json());
   app.post("/api/send-whatsapp", async (req, res) => {
     try {
