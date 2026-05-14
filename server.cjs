@@ -26,7 +26,6 @@ var import_express = __toESM(require("express"), 1);
 var import_path = __toESM(require("path"), 1);
 var import_vite = require("vite");
 var import_fs = __toESM(require("fs"), 1);
-var import_cors = __toESM(require("cors"), 1);
 async function startScheduler() {
   try {
     const configPath = import_path.default.join(process.cwd(), "firebase-applet-config.json");
@@ -168,16 +167,22 @@ async function sendWhatsapp(phone, message) {
 async function startServer() {
   const app = (0, import_express.default)();
   const PORT = 3e3;
-  app.use((0, import_cors.default)({
-    origin: (origin, callback) => callback(null, true),
-    // Allow all origins for the API
-    credentials: true,
-    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization", "apikey", "Accept", "X-Requested-With"]
-  }));
+  app.use((req, res, next) => {
+    const origin = req.headers.origin || "*";
+    res.setHeader("Access-Control-Allow-Origin", origin);
+    res.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS");
+    res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization, apikey, Accept, X-Requested-With");
+    res.setHeader("Access-Control-Allow-Credentials", "true");
+    res.setHeader("Access-Control-Max-Age", "86400");
+    if (req.method === "OPTIONS") {
+      console.log(`[CORS] Preflight for ${req.url} from ${origin}`);
+      return res.status(200).end();
+    }
+    next();
+  });
   app.use(import_express.default.json());
   app.use((req, res, next) => {
-    console.log(`[Request] ${req.method} ${req.url} (Path: ${req.path}) from ${req.headers.origin}`);
+    console.log(`[Request] ${req.method} ${req.url} (Path: ${req.path}) from ${req.headers.origin || "no-origin"}`);
     next();
   });
   const healthHandler = (req, res) => {
@@ -186,28 +191,32 @@ async function startServer() {
       time: (/* @__PURE__ */ new Date()).toISOString(),
       url: req.url,
       path: req.path,
+      headers: req.headers,
       whatsappConfigured: !!(process.env.EVOLUTION_API_URL && process.env.EVOLUTION_API_KEY && process.env.EVOLUTION_INSTANCE_NAME)
     });
   };
-  app.get(["/api/health", "/health", /.*\/api\/health$/], healthHandler);
+  app.get("/api/health", healthHandler);
+  app.get("/health", healthHandler);
   const whatsappHandler = async (req, res) => {
-    console.log(`[WhatsApp API] Request received`);
+    console.log(`[WhatsApp API] Request for ${req.body?.phone} received at ${req.path}`);
     try {
       const { phone, message } = req.body;
       if (!phone || !message) {
+        console.log("[WhatsApp API] Missing phone or message in body");
         return res.status(400).json({ success: false, issue: "Missing phone or message" });
       }
       const apiUrl = process.env.EVOLUTION_API_URL;
       const apiKey = process.env.EVOLUTION_API_KEY;
       const instanceName = process.env.EVOLUTION_INSTANCE_NAME;
       if (!apiUrl || !apiKey || !instanceName) {
+        console.error("[WhatsApp API] Credentials missing in environment variables");
         return res.status(500).json({ success: false, issue: "WhatsApp credentials not configured on server" });
       }
       let cleanPhone = phone.replace(/\D/g, "");
       if (cleanPhone.length >= 10 && cleanPhone.length <= 11 && !cleanPhone.startsWith("55")) {
         cleanPhone = "55" + cleanPhone;
       }
-      console.log(`[WhatsApp API] Forwarding to Evolution API for ${cleanPhone}...`);
+      console.log(`[WhatsApp API] Forwarding to Evolution API (${cleanPhone})...`);
       const response = await fetch(`${apiUrl}/message/sendText/${instanceName}`, {
         method: "POST",
         headers: {
@@ -220,19 +229,30 @@ async function startServer() {
           text: message
         })
       });
-      if (!response.ok) {
-        const errInfo = await response.text();
-        return res.status(response.status).json({ success: false, details: errInfo });
-      }
       const data = await response.json();
+      if (!response.ok) {
+        console.error(`[WhatsApp API] Evolution API error:`, data);
+        return res.status(response.status).json({ success: false, details: data });
+      }
+      console.log(`[WhatsApp API] Message sent successfully to ${cleanPhone}`);
       res.json({ success: true, data });
     } catch (error) {
+      console.error("[WhatsApp API] Internal Error:", error);
       res.status(500).json({ success: false, issue: error.message });
     }
   };
-  app.post(["/api/send-whatsapp", "/api/send-whatsapp/"], whatsappHandler);
-  app.post(/.*\/api\/send-whatsapp\/?$/, whatsappHandler);
-  app.get(/.*\/api\/send-whatsapp\/?$/, (req, res) => res.json({ message: "Ready for POST" }));
+  const handlerWrapper = (req, res) => {
+    whatsappHandler(req, res);
+  };
+  app.post("/api/send-whatsapp", handlerWrapper);
+  app.post("/api/send-whatsapp/", handlerWrapper);
+  app.post(/.*\/api\/send-whatsapp\/?$/, handlerWrapper);
+  app.get(/.*\/api\/send-whatsapp\/?$/, (req, res) => {
+    res.json({ message: "WhatsApp endpoint is ready. Use POST to send messages.", path: req.path, url: req.url });
+  });
+  app.get("/api/health", healthHandler);
+  app.get("/health", healthHandler);
+  app.get(/.*\/api\/health$/, healthHandler);
   if (process.env.NODE_ENV !== "production") {
     const vite = await (0, import_vite.createServer)({
       server: { middlewareMode: true },
