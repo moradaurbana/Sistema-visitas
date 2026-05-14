@@ -163,15 +163,28 @@ async function startServer() {
     next();
   });
 
+  // CORS - should be broad for AIS preview and GitHub Pages
   app.use(cors({
-    origin: '*', // For now allow all, but could be specific
+    origin: '*',
     methods: ['GET', 'POST', 'PATCH', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization']
+    allowedHeaders: ['Content-Type', 'Authorization', 'apikey']
   }));
+  
+  // Explicit OPTIONS handler for preflights
+  app.options('*', cors());
+
   app.use(express.json());
 
-// Evolution API Whatsapp Route
-  app.post(['/api/send-whatsapp', '/api/send-whatsapp/'], async (req, res) => {
+  // Test Route
+  app.get('/api/health', (req, res) => {
+    res.json({ 
+      status: 'ok', 
+      whatsappConfigured: !!(process.env.EVOLUTION_API_URL && process.env.EVOLUTION_API_KEY && process.env.EVOLUTION_INSTANCE_NAME)
+    });
+  });
+
+  // Evolution API Whatsapp Route - Define both with and without trailing slash for robustness
+  const whatsappHandler = async (req: express.Request, res: express.Response) => {
     try {
       const { phone, message } = req.body;
       
@@ -181,16 +194,15 @@ async function startServer() {
 
       if (!apiUrl || !apiKey || !instanceName) {
         console.log("[WhatsApp] Attempted to send but credentials are missing in Environment Variables.");
-        throw new Error("Evolution API environment variables are not configured. Please set them in Settings > Environment Variables.");
+        return res.status(400).json({ 
+          success: false, 
+          issue: "Evolution API environment variables are not configured. Please set them in Settings > Environment Variables." 
+        });
       }
 
       const endpoint = `${apiUrl}/message/sendText/${instanceName}`;
       
-      // Evolution API requires a specific phone number format (with country code)
-      // Remove any non-numeric characters
       let cleanPhone = phone.replace(/\D/g, '');
-      
-      // Basic auto-fix for Brazilian numbers if country code is missing
       if (cleanPhone.length >= 10 && cleanPhone.length <= 11 && !cleanPhone.startsWith('55')) {
         cleanPhone = '55' + cleanPhone;
       }
@@ -216,7 +228,7 @@ async function startServer() {
       if (!response.ok) {
         const errInfo = await response.text();
         console.error(`[WhatsApp] Evolution API error for ${cleanPhone}:`, errInfo);
-        throw new Error(`Evolution API error: ${response.status} - ${errInfo}`);
+        return res.status(response.status).json({ success: false, issue: `Evolution API error: ${response.status}`, details: errInfo });
       }
 
       const data = await response.json();
@@ -226,6 +238,25 @@ async function startServer() {
       console.log("WhatsApp Send Result:", String(error).replace(/error/gi, 'issue'));
       res.status(500).json({ success: false, issue: error.message });
     }
+  };
+
+  // Define routes normally and with platform base path prefix if applicable
+  const apiPaths = [
+    '/api/send-whatsapp',
+    '/api/send-whatsapp/',
+    '/Sistema-visitas/api/send-whatsapp',
+    '/Sistema-visitas/api/send-whatsapp/'
+  ];
+  
+  apiPaths.forEach(path => {
+    app.post(path, whatsappHandler);
+  });
+
+  app.get(['/api/health', '/Sistema-visitas/api/health'], (req, res) => {
+    res.json({ 
+      status: 'ok', 
+      whatsappConfigured: !!(process.env.EVOLUTION_API_URL && process.env.EVOLUTION_API_KEY && process.env.EVOLUTION_INSTANCE_NAME)
+    });
   });
 
   // Vite middleware for development
