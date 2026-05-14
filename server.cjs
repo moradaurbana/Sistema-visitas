@@ -26,6 +26,7 @@ var import_express = __toESM(require("express"), 1);
 var import_path = __toESM(require("path"), 1);
 var import_vite = require("vite");
 var import_fs = __toESM(require("fs"), 1);
+var import_cors = __toESM(require("cors"), 1);
 async function startScheduler() {
   try {
     const configPath = import_path.default.join(process.cwd(), "firebase-applet-config.json");
@@ -167,39 +168,28 @@ async function sendWhatsapp(phone, message) {
 async function startServer() {
   const app = (0, import_express.default)();
   const PORT = 3e3;
-  app.get("/health", (req, res) => res.json({ status: "alive", v: "1.1.0" }));
-  app.get("/api/health", (req, res) => res.json({ status: "alive", api: true, v: "1.1.0" }));
+  app.use((0, import_cors.default)({
+    origin: true,
+    // Echo origin
+    credentials: true,
+    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS", "HEAD"],
+    allowedHeaders: ["Content-Type", "Authorization", "apikey", "Accept", "Origin", "X-Requested-With"]
+  }));
   app.use((req, res, next) => {
     console.log(`[REQ] ${(/* @__PURE__ */ new Date()).toISOString()} | ${req.method} ${req.url}`);
-    const origin = req.headers.origin || "*";
-    res.setHeader("Access-Control-Allow-Origin", origin);
-    res.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS, HEAD");
-    res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization, apikey, Accept, Origin, X-Requested-With");
-    res.setHeader("Access-Control-Allow-Credentials", "true");
-    if (req.method === "OPTIONS") {
-      return res.status(200).end();
-    }
     next();
   });
-  app.use(import_express.default.json());
   const healthCheck = (req, res) => {
     res.json({
       status: "ok",
-      v: "1.1.0",
+      v: "1.1.2",
       env: process.env.NODE_ENV,
-      time: (/* @__PURE__ */ new Date()).toISOString(),
-      url: req.url
+      time: (/* @__PURE__ */ new Date()).toISOString()
     });
   };
-  app.all("/api", (req, res) => {
-    res.json({
-      message: "Agenda Moderna API",
-      endpoints: ["/api/health", "/api/send-whatsapp", "/health"],
-      v: "1.1.1"
-    });
-  });
-  app.get("/api/health-check", healthCheck);
-  app.get("/api/status", healthCheck);
+  app.get(["/health", "/api/health", "/api/health-check"], healthCheck);
+  app.all("/api/status", healthCheck);
+  app.use(import_express.default.json());
   const whatsappHandler = async (req, res) => {
     const { phone, message } = req.body;
     console.log(`[WhatsApp-API] Processing request for phone: ${phone}`);
@@ -250,7 +240,10 @@ async function startServer() {
     }
   };
   app.post(["/api/send-whatsapp", "/api/send-whatsapp/"], whatsappHandler);
-  app.post(/.*\/api\/send-whatsapp\/?$/, whatsappHandler);
+  app.all("/api/send-whatsapp*", (req, res, next) => {
+    if (req.method === "POST") return whatsappHandler(req, res);
+    next();
+  });
   const isProduction = process.env.NODE_ENV === "production";
   if (!isProduction) {
     console.log("[Server] Mounting VITE middleware");
