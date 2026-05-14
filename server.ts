@@ -157,40 +157,47 @@ async function startServer() {
   const app = express();
   const PORT = 3000;
 
-  // 1. GLOBAL CORS (Including OPTIONS handling)
+  // 1. GLOBAL CORS & LOGGING
   app.use(cors({
-    origin: true, // Echo origin
+    origin: true,
     credentials: true,
     methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS", "HEAD"],
     allowedHeaders: ["Content-Type", "Authorization", "apikey", "Accept", "Origin", "X-Requested-With"]
   }));
 
-  // Log incoming requests for debugging
   app.use((req, res, next) => {
-    console.log(`[REQ] ${new Date().toISOString()} | ${req.method} ${req.url}`);
+    const timestamp = new Date().toISOString();
+    console.log(`[REQ] ${timestamp} | ${req.method} ${req.url}`);
     next();
   });
 
-  // 2. HEALTH & DIAGNOSTIC ROUTES (Early)
-  const healthCheck = (req: any, res: any) => {
+  // 2. Body Parsing
+  app.use(express.json());
+
+  // 3. API ROUTES (Explicitly handled BEFORE static/Vite)
+  const apiRouter = express.Router();
+
+  const healthHandler = (req: any, res: any) => {
+    console.log(`[API-Health] Sending response to ${req.method} ${req.url}`);
     res.json({ 
       status: "ok", 
-      v: "1.1.2", 
+      message: "Agenda Moderna API is online", 
+      time: new Date().toISOString(),
       env: process.env.NODE_ENV,
-      time: new Date().toISOString()
+      v: "1.1.3"
     });
   };
 
-  app.get(['/health', '/api/health', '/api/health-check'], healthCheck);
-  app.all('/api/status', healthCheck);
+  // Register health variants inside /api
+  apiRouter.get('/health', healthHandler);
+  apiRouter.get('/health-check', healthHandler);
+  apiRouter.get('/status', healthHandler);
+  apiRouter.all('/', (req, res) => res.json({ message: "Welcome to Agenda Moderna API", v: "1.1.3" }));
 
-  // 3. Body Parsing
-  app.use(express.json());
-
-  // 4. API HANDLERS & REGISTRATION
+  // WhatsApp Handler
   const whatsappHandler = async (req: express.Request, res: express.Response) => {
     const { phone, message } = req.body;
-    console.log(`[WhatsApp-API] Processing request for phone: ${phone}`);
+    console.log(`[WhatsApp-API] Processing for phone: ${phone}`);
     
     try {
       const apiUrl = process.env.EVOLUTION_API_URL;
@@ -198,14 +205,8 @@ async function startServer() {
       const instanceName = process.env.EVOLUTION_INSTANCE_NAME;
 
       if (!phone || !message || !apiUrl || !apiKey || !instanceName) {
-        const missing = [];
-        if (!phone) missing.push("phone");
-        if (!message) missing.push("message");
-        if (!apiUrl) missing.push("apiUrl");
-        if (!apiKey) missing.push("apiKey");
-        if (!instanceName) missing.push("instanceName");
-        console.log(`[WhatsApp-API] Error: Missing ${missing.join(", ")}`);
-        return res.status(400).json({ success: false, error: `Missing variables: ${missing.join(", ")}` });
+        console.log(`[WhatsApp-API] Error: Missing config or params`);
+        return res.status(400).json({ success: false, error: "Missing config or params" });
       }
 
       let cleanPhone = phone.replace(/\D/g, "");
@@ -213,11 +214,7 @@ async function startServer() {
         cleanPhone = "55" + cleanPhone;
       }
 
-      console.log(`[WhatsApp-API] Forwarding to: ${apiUrl}/message/sendText/${instanceName}`);
-      
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 15000); // 15s timeout
-
+      console.log(`[WhatsApp-API] Sending request to Evolution API...`);
       const response = await fetch(`${apiUrl}/message/sendText/${instanceName}`, {
         method: "POST",
         headers: { "Content-Type": "application/json", "apikey": apiKey },
@@ -225,35 +222,31 @@ async function startServer() {
           number: cleanPhone,
           options: { delay: 1200, presence: "composing" },
           text: message
-        }),
-        signal: controller.signal
+        })
       });
 
-      clearTimeout(timeoutId);
-
       const responseText = await response.text();
-      let responseData;
-      try {
-        responseData = JSON.parse(responseText);
-      } catch (e) {
-        responseData = { text: responseText };
-      }
-
-      console.log(`[WhatsApp-API] Response Status: ${response.status}`);
-      res.status(response.status).json({ success: response.ok, data: responseData });
+      console.log(`[WhatsApp-API] Evolution Response Status: ${response.status}`);
+      
+      let data;
+      try { data = JSON.parse(responseText); } catch(e) { data = responseText; }
+      
+      res.status(response.status).json({ success: response.ok, data });
     } catch (error: any) {
-      console.error("[WhatsApp-API] Error:", error.name === 'AbortError' ? 'Timeout' : error.message);
+      console.error("[WhatsApp-API] Exception:", error.message);
       res.status(500).json({ success: false, error: error.message });
     }
   };
 
-  app.post(['/api/send-whatsapp', '/api/send-whatsapp/'], whatsappHandler);
-  app.all('/api/send-whatsapp*', (req, res, next) => {
-    if (req.method === 'POST') return whatsappHandler(req, res);
-    next();
-  });
+  apiRouter.post('/send-whatsapp', whatsappHandler);
+  
+  // Use the router for ALL /api requests
+  app.use('/api', apiRouter);
 
-  // 5. STATIC FILES & SPA FALLBACK
+  // Global health check (outside /api)
+  app.get('/health', healthHandler);
+
+  // 4. STATIC FILES & SPA FALLBACK
   const isProduction = process.env.NODE_ENV === "production";
   
   if (!isProduction) {
