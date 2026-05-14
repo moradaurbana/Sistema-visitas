@@ -24,6 +24,8 @@ export function EventModal({ isOpen, onClose, onSave, selectedDate, realtors, ev
   const [endTime, setEndTime] = useState("");
   const [notes, setNotes] = useState("");
   const [conflictError, setConflictError] = useState<string | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   const selectedRealtor = realtors.find(r => r.id === realtorId);
 
@@ -76,35 +78,39 @@ export function EventModal({ isOpen, onClose, onSave, selectedDate, realtors, ev
 
   if (!isOpen) return null;
 
-  const handleSubmit = (e: FormEvent) => {
+  const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
-    if (!realtorId || !clientName.trim() || !location.trim() || !date || !startTime || conflictError) return;
+    if (!realtorId || !clientName.trim() || !location.trim() || !date || !startTime || conflictError || isSaving) return;
 
-    const eventData = {
-      date: date,
-      startTime: startTime,
-      endTime: endTime || undefined,
-      location,
-      realtorId,
-      client: {
-        name: clientName,
-        phone: clientPhone,
-        email: clientEmail,
-      },
-      notes: notes || undefined,
-      status: editEvent?.status || 'scheduled' as const,
-    };
+    setIsSaving(true);
+    setSaveError(null);
+    try {
+      const eventData = {
+        date: date,
+        startTime: startTime,
+        endTime: endTime || undefined,
+        location,
+        realtorId,
+        client: {
+          name: clientName,
+          phone: clientPhone,
+          email: clientEmail,
+        },
+        notes: notes || undefined,
+        status: editEvent?.status || 'scheduled' as const,
+      };
 
-    if (editEvent) {
-      onSave({ ...eventData, id: editEvent.id });
-    } else {
-      onSave(eventData);
+      await onSave(eventData);
+      onClose();
+    } catch (err: any) {
+      console.error("Error saving event:", err);
+      setSaveError("Ocorreu um erro ao salvar o agendamento. Verifique sua conexão.");
+    } finally {
+      setIsSaving(false);
     }
-    
-    onClose();
   };
 
-  const isFormValid = realtorId && clientName.trim() && location.trim() && date && startTime && !conflictError;
+  const isFormValid = realtorId && clientName.trim() && location.trim() && date && startTime && !conflictError && !isSaving;
 
   return (
     <div className="fixed inset-0 z-50 flex flex-col items-center justify-end md:justify-center p-0 md:p-4 bg-black/20 backdrop-blur-sm">
@@ -112,20 +118,27 @@ export function EventModal({ isOpen, onClose, onSave, selectedDate, realtors, ev
         className="w-full max-w-lg bg-apple-bg md:rounded-2xl rounded-t-2xl shadow-[0_8px_30px_rgb(0,0,0,0.12)] overflow-hidden flex flex-col max-h-[90vh] animate-in slide-in-from-bottom md:zoom-in-95 duration-200"
       >
         <div className="flex items-center justify-between px-4 py-3 border-b border-apple-border bg-white shrink-0">
-          <button onClick={onClose} className="text-apple-blue hover:opacity-80 font-medium">
+          <button onClick={onClose} disabled={isSaving} className="text-apple-blue hover:opacity-80 font-medium disabled:opacity-50">
             Cancelar
           </button>
           <h3 className="font-semibold text-[17px]">{editEvent ? "Editar Visita" : "Nova Visita"}</h3>
           <button 
             onClick={handleSubmit} 
-            className="text-apple-blue hover:opacity-80 font-semibold disabled:opacity-50"
+            className="text-apple-blue hover:opacity-80 font-semibold disabled:opacity-50 flex items-center gap-2"
             disabled={!isFormValid}
           >
+            {isSaving && <div className="w-3 h-3 border-2 border-apple-blue border-t-transparent rounded-full animate-spin" />}
             {editEvent ? "Salvar" : "Adicionar"}
           </button>
         </div>
 
         <form onSubmit={handleSubmit} className="overflow-y-auto hidden-scrollbar p-4 space-y-6">
+          {saveError && (
+            <div className="mx-4 p-3 rounded-xl bg-red-100 text-apple-red text-sm font-semibold border border-apple-red/20 shadow-sm animate-in fade-in zoom-in duration-200">
+              ❌ {saveError}
+            </div>
+          )}
+
           {conflictError && (
             <div className="mx-4 p-3 rounded-xl bg-apple-red/10 text-apple-red text-sm font-medium border border-apple-red/20 shadow-sm animate-in fade-in zoom-in duration-200">
               ⚠️ {conflictError}

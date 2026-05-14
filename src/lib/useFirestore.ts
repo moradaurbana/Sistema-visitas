@@ -199,16 +199,35 @@ export function useFirestoreData(user: User | null) {
           
           try {
             console.log(`[WhatsApp] Sending to client: ${payload.clienteWhatsapp}`);
-            const response = await fetch(getApiUrl('/api/send-whatsapp'), {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                phone: payload.clienteWhatsapp,
-                message: message
-              })
-            });
-            const result = await response.json();
-            console.log("[WhatsApp] Client notification result:", result);
+            
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 10000); // 10s timeout
+            
+            try {
+              const response = await fetch(getApiUrl('/api/send-whatsapp'), {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  phone: payload.clienteWhatsapp,
+                  message: message
+                }),
+                signal: controller.signal
+              });
+              
+              clearTimeout(timeoutId);
+              
+              let result;
+              const contentType = response.headers.get("content-type");
+              if (contentType && contentType.includes("application/json")) {
+                result = await response.json();
+              } else {
+                result = { success: response.ok, text: await response.text() };
+              }
+              console.log("[WhatsApp] Client notification result:", result);
+            } catch (fetchErr: any) {
+              clearTimeout(timeoutId);
+              console.error("[WhatsApp] Fetch failed or timed out:", fetchErr.name === 'AbortError' ? 'Timeout' : fetchErr.message);
+            }
           } catch (err) {
             console.error("Failed to send WhatsApp notification", err);
           }
@@ -220,16 +239,34 @@ export function useFirestoreData(user: User | null) {
           
           try {
             console.log(`[WhatsApp] Sending to realtor: ${realtorInfo.phone}`);
-            const response = await fetch(getApiUrl('/api/send-whatsapp'), {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                phone: realtorInfo.phone,
-                message: corretorMessage
-              })
-            });
-            const result = await response.json();
-            console.log("[WhatsApp] Realtor notification result:", result);
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 10000);
+
+            try {
+              const response = await fetch(getApiUrl('/api/send-whatsapp'), {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  phone: realtorInfo.phone,
+                  message: corretorMessage
+                }),
+                signal: controller.signal
+              });
+              
+              clearTimeout(timeoutId);
+              
+              let result;
+              const contentType = response.headers.get("content-type");
+              if (contentType && contentType.includes("application/json")) {
+                result = await response.json();
+              } else {
+                result = { success: response.ok, text: await response.text() };
+              }
+              console.log("[WhatsApp] Realtor notification result:", result);
+            } catch (fetchErr: any) {
+              clearTimeout(timeoutId);
+              console.error("[WhatsApp] Realtor Fetch failed or timed out:", fetchErr.name === 'AbortError' ? 'Timeout' : fetchErr.message);
+            }
           } catch (err) {
             console.error("Failed to send WhatsApp to corretor", err);
           }
@@ -255,13 +292,31 @@ export function useFirestoreData(user: User | null) {
             const clientMsg = `Olá *${payload.clienteNome}*,\n\nSua visita foi remarcada!\n\n📅 Nova Data: ${payload.dataVisita}\n⌚ Novo Horário: ${payload.horaVisita}\n📍 Endereço: ${payload.endereco}\n\nQualquer dúvida, entre em contato!\nObrigado!`;
             try {
               console.log(`[WhatsApp] Sending rescheduling to client: ${finalClientPhone}`);
-              const response = await fetch(getApiUrl('/api/send-whatsapp'), {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ phone: finalClientPhone, message: clientMsg })
-              });
-              const result = await response.json();
-              console.log("[WhatsApp] Client rescheduling notification result:", result);
+              const controller = new AbortController();
+              const timeoutId = setTimeout(() => controller.abort(), 10000);
+
+              try {
+                const response = await fetch(getApiUrl('/api/send-whatsapp'), {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ phone: finalClientPhone, message: clientMsg }),
+                  signal: controller.signal
+                });
+                
+                clearTimeout(timeoutId);
+                
+                let result;
+                const contentType = response.headers.get("content-type");
+                if (contentType && contentType.includes("application/json")) {
+                  result = await response.json();
+                } else {
+                  result = { success: response.ok, text: await response.text() };
+                }
+                console.log("[WhatsApp] Client rescheduling notification result:", result);
+              } catch (fetchErr: any) {
+                clearTimeout(timeoutId);
+                console.error("[WhatsApp] Rescheduling Client Fetch failed or timed out:", fetchErr.name === 'AbortError' ? 'Timeout' : fetchErr.message);
+              }
             } catch (err) {
               console.error("Failed to send WhatsApp rescheduling to client", err);
             }
@@ -271,13 +326,31 @@ export function useFirestoreData(user: User | null) {
              const realtorMsg = `Olá *${payload.corretorNome}*,\n\nA visita de *${payload.clienteNome}* foi remarcada!\n\n📅 Nova Data: ${payload.dataVisita}\n⌚ Novo Horário: ${payload.horaVisita}\n📍 Endereço: ${payload.endereco}\n\nBom trabalho!`;
              try {
                console.log(`[WhatsApp] Sending rescheduling to realtor: ${realtorInfo.phone}`);
-               const response = await fetch(getApiUrl('/api/send-whatsapp'), {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ phone: realtorInfo.phone, message: realtorMsg })
-              });
-              const result = await response.json();
-              console.log("[WhatsApp] Realtor rescheduling notification result:", result);
+               const controller = new AbortController();
+               const timeoutId = setTimeout(() => controller.abort(), 10000);
+
+               try {
+                 const response = await fetch(getApiUrl('/api/send-whatsapp'), {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ phone: realtorInfo.phone, message: realtorMsg }),
+                  signal: controller.signal
+                });
+                
+                clearTimeout(timeoutId);
+                
+                let result;
+                const contentType = response.headers.get("content-type");
+                if (contentType && contentType.includes("application/json")) {
+                  result = await response.json();
+                } else {
+                  result = { success: response.ok, text: await response.text() };
+                }
+                console.log("[WhatsApp] Realtor rescheduling notification result:", result);
+               } catch (fetchErr: any) {
+                 clearTimeout(timeoutId);
+                 console.error("[WhatsApp] Rescheduling Realtor Fetch failed or timed out:", fetchErr.name === 'AbortError' ? 'Timeout' : fetchErr.message);
+               }
              } catch (err) {
                console.error("Failed to send WhatsApp rescheduling to realtor", err);
              }

@@ -18,9 +18,12 @@ export default defineConfig(({mode}) => {
     console.warn('Could not read firebase-applet-config.json', e);
   }
 
+  const isProduction = process.env.NODE_ENV === "production";
+  const isGithubActions = !!process.env.GITHUB_ACTIONS;
+
   return {
     plugins: [react(), tailwindcss()],
-    base: '/Sistema-visitas/',
+    base: (isGithubActions || mode === 'github') ? '/Sistema-visitas/' : '/',
     define: {
       'import.meta.env.VITE_FIREBASE_API_KEY': JSON.stringify(env.VITE_FIREBASE_API_KEY || firebaseConfig.apiKey || ''),
       'import.meta.env.VITE_FIREBASE_AUTH_DOMAIN': JSON.stringify(env.VITE_FIREBASE_AUTH_DOMAIN || firebaseConfig.authDomain || ''),
