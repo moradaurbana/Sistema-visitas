@@ -177,24 +177,44 @@ export function useFirestoreData(user: User | null) {
         // WhatsApp to Client
         if (payload.clienteWhatsapp) {
           const realtorPhone = realtorInfo?.phone || '';
-          const message = `Olá *${payload.clienteNome}*,\n\nSua visita foi agendada!\n\n📅 Data: ${payload.dataVisita}\n⌚ Horário: ${payload.horaVisita}\n📍 Endereço: ${payload.endereco}\n\nCorretor: *${payload.corretorName}* ${realtorPhone ? '(' + realtorPhone + ')' : ''}\n\nObrigado!`;
+          const message = `Olá *${payload.clienteNome}*,\n\nSua visita foi agendada!\n\n📅 Data: ${payload.dataVisita}\n⌚ Horário: ${payload.horaVisita}\n📍 Endereço: ${payload.endereco}\n\nCorretor: *${payload.corretorName}* ${realtorPhone ? '(' + realtorPhone + ')' : ''}\n\nQualquer dúvida, entre em contato!\nObrigado!`;
           const targetUrl = getApiUrl('/api/send-whatsapp');
+          console.log(`[WhatsApp] Sending to client: ${payload.clienteWhatsapp} | URL: ${targetUrl}`);
+          
           fetch(targetUrl, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ phone: payload.clienteWhatsapp, message })
-          }).then(r => r.json()).then(res => console.log("WA Client:", res)).catch(e => console.error("WA Client Err:", e));
+            body: JSON.stringify({ 
+              phone: payload.clienteWhatsapp, 
+              message 
+            })
+          })
+          .then(async r => {
+             const res = await r.json();
+             console.log("[WhatsApp] Client Result:", res);
+          })
+          .catch(e => console.error("[WhatsApp] Client Error:", e));
         }
 
         // WhatsApp to Realtor
         if (realtorInfo?.phone) {
-          const realtorMsg = `Nova visita agendada!\n\n🧑 Cliente: ${payload.clienteNome}\n📞 WhatsApp: ${payload.clienteWhatsapp || 'N/A'}\n📅 Data: ${payload.dataVisita}\n⌚ Horário: ${payload.horaVisita}\n📍 Local: ${payload.endereco}`;
+          const realtorMsg = `Olá *${payload.corretorName}*,\n\nUma nova visita foi agendada!\n\n🧑 Cliente: ${payload.clienteNome}\n📞 WhatsApp: ${payload.clienteWhatsapp || 'N/A'}\n📅 Data: ${payload.dataVisita}\n⌚ Horário: ${payload.horaVisita}\n📍 Local: ${payload.endereco}\n\nBom trabalho!`;
           const targetUrl = getApiUrl('/api/send-whatsapp');
+          console.log(`[WhatsApp] Sending to realtor: ${realtorInfo.phone} | URL: ${targetUrl}`);
+          
           fetch(targetUrl, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ phone: realtorInfo.phone, message: realtorMsg })
-          }).then(r => r.json()).then(res => console.log("WA Realtor:", res)).catch(e => console.error("WA Realtor Err:", e));
+            body: JSON.stringify({ 
+              phone: realtorInfo.phone, 
+              message: realtorMsg 
+            })
+          })
+          .then(async r => {
+             const res = await r.json();
+             console.log("[WhatsApp] Realtor Result:", res);
+          })
+          .catch(e => console.error("[WhatsApp] Realtor Error:", e));
         }
       } else {
         const existingDoc = await getDoc(ref);
