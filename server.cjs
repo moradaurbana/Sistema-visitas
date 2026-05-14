@@ -175,16 +175,25 @@ async function startServer() {
   app.use((0, import_cors.default)({
     origin: "*",
     methods: ["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization", "apikey"]
+    allowedHeaders: ["Content-Type", "Authorization", "apikey"],
+    credentials: true
   }));
-  app.options("*", (0, import_cors.default)());
+  app.options("*", (req, res) => {
+    res.header("Access-Control-Allow-Origin", "*");
+    res.header("Access-Control-Allow-Methods", "GET, POST, PATCH, DELETE, OPTIONS");
+    res.header("Access-Control-Allow-Headers", "Content-Type, Authorization, apikey");
+    res.sendStatus(200);
+  });
   app.use(import_express.default.json());
-  app.get("/api/health", (req, res) => {
+  const healthHandler = (req, res) => {
     res.json({
       status: "ok",
       whatsappConfigured: !!(process.env.EVOLUTION_API_URL && process.env.EVOLUTION_API_KEY && process.env.EVOLUTION_INSTANCE_NAME)
     });
-  });
+  };
+  app.get("/api/health", healthHandler);
+  app.get("/api/health/", healthHandler);
+  app.get("/Sistema-visitas/api/health", healthHandler);
   const whatsappHandler = async (req, res) => {
     try {
       const { phone, message } = req.body;
@@ -195,16 +204,15 @@ async function startServer() {
         console.log("[WhatsApp] Attempted to send but credentials are missing in Environment Variables.");
         return res.status(400).json({
           success: false,
-          issue: "Evolution API environment variables are not configured. Please set them in Settings > Environment Variables."
+          issue: "Evolution API environment variables are not configured."
         });
       }
-      const endpoint = `${apiUrl}/message/sendText/${instanceName}`;
       let cleanPhone = phone.replace(/\D/g, "");
       if (cleanPhone.length >= 10 && cleanPhone.length <= 11 && !cleanPhone.startsWith("55")) {
         cleanPhone = "55" + cleanPhone;
       }
       console.log(`[WhatsApp] Sending to ${cleanPhone}...`);
-      const response = await fetch(endpoint, {
+      const response = await fetch(`${apiUrl}/message/sendText/${instanceName}`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -212,41 +220,26 @@ async function startServer() {
         },
         body: JSON.stringify({
           number: cleanPhone,
-          options: {
-            delay: 1200,
-            presence: "composing"
-          },
+          options: { delay: 1200, presence: "composing" },
           text: message
         })
       });
       if (!response.ok) {
         const errInfo = await response.text();
-        console.error(`[WhatsApp] Evolution API error for ${cleanPhone}:`, errInfo);
-        return res.status(response.status).json({ success: false, issue: `Evolution API error: ${response.status}`, details: errInfo });
+        console.error(`[WhatsApp] Evolution API error:`, errInfo);
+        return res.status(response.status).json({ success: false, details: errInfo });
       }
       const data = await response.json();
-      console.log(`[WhatsApp] Success sending to ${cleanPhone}`);
       res.json({ success: true, data });
     } catch (error) {
-      console.log("WhatsApp Send Result:", String(error).replace(/error/gi, "issue"));
+      console.log("WhatsApp Send Result Error:", error);
       res.status(500).json({ success: false, issue: error.message });
     }
   };
-  const apiPaths = [
-    "/api/send-whatsapp",
-    "/api/send-whatsapp/",
-    "/Sistema-visitas/api/send-whatsapp",
-    "/Sistema-visitas/api/send-whatsapp/"
-  ];
-  apiPaths.forEach((path2) => {
-    app.post(path2, whatsappHandler);
-  });
-  app.get(["/api/health", "/Sistema-visitas/api/health"], (req, res) => {
-    res.json({
-      status: "ok",
-      whatsappConfigured: !!(process.env.EVOLUTION_API_URL && process.env.EVOLUTION_API_KEY && process.env.EVOLUTION_INSTANCE_NAME)
-    });
-  });
+  app.post("/api/send-whatsapp", whatsappHandler);
+  app.post("/api/send-whatsapp/", whatsappHandler);
+  app.post("/Sistema-visitas/api/send-whatsapp", whatsappHandler);
+  app.post("/Sistema-visitas/api/send-whatsapp/", whatsappHandler);
   if (process.env.NODE_ENV !== "production") {
     const vite = await (0, import_vite.createServer)({
       server: { middlewareMode: true },
