@@ -168,9 +168,18 @@ async function sendWhatsapp(phone, message) {
 async function startServer() {
   const app = (0, import_express.default)();
   const PORT = 3e3;
-  app.use((0, import_cors.default)());
+  app.use((req, res, next) => {
+    console.log(`[Server] ${req.method} ${req.url} from ${req.headers.origin}`);
+    next();
+  });
+  app.use((0, import_cors.default)({
+    origin: "*",
+    // For now allow all, but could be specific
+    methods: ["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization"]
+  }));
   app.use(import_express.default.json());
-  app.post("/api/send-whatsapp", async (req, res) => {
+  app.post(["/api/send-whatsapp", "/api/send-whatsapp/"], async (req, res) => {
     try {
       const { phone, message } = req.body;
       const apiUrl = process.env.EVOLUTION_API_URL;
