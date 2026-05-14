@@ -1,11 +1,13 @@
 import { useState } from "react";
-import { format, isSameDay, isToday, isTomorrow, isYesterday } from "date-fns";
+import { format, isSameDay, isToday, isTomorrow, isYesterday, addDays, subDays, addMonths, subMonths } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { Plus, Calendar as CalendarIcon, Clock, Trash2, Users, LayoutDashboard, CheckCircle2, XCircle, Pencil, LogOut, ChevronDown, ChevronUp } from "lucide-react";
+import { Plus, Calendar as CalendarIcon, Clock, Trash2, Users, LayoutDashboard, CheckCircle2, XCircle, Pencil, LogOut, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, List, CalendarDays, Grid3X3 } from "lucide-react";
 import { MiniCalendar } from "./components/MiniCalendar";
 import { EventModal } from "./components/EventModal";
 import { RealtorModal } from "./components/RealtorModal";
 import { Dashboard } from "./components/Dashboard";
+import { WeekView } from "./components/WeekView";
+import { MonthView } from "./components/MonthView";
 import { CalendarEvent, Realtor, EventStatus } from "./types";
 import { cn } from "./lib/utils";
 import { useAuth } from "./lib/useAuth";
@@ -16,6 +18,7 @@ export default function App() {
   const { events, realtors, loading: dataLoading, saveEvent, deleteEvent, saveRealtor, deleteRealtor, updateEventStatus } = useFirestoreData(user);
 
   const [currentView, setCurrentView] = useState<'agenda' | 'dashboard'>('agenda');
+  const [calendarView, setCalendarView] = useState<'day' | 'week' | 'month'>('day');
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [currentDisplayMonth, setCurrentDisplayMonth] = useState(new Date());
   
@@ -93,10 +96,29 @@ export default function App() {
   }, {} as Record<string, CalendarEvent[]>);
 
   const getDayHeader = (date: Date) => {
+    if (calendarView === 'month') return format(currentDisplayMonth, "MMMM yyyy", { locale: ptBR });
+    if (calendarView === 'week') return "Semana";
     if (isToday(date)) return "Hoje";
     if (isTomorrow(date)) return "Amanhã";
     if (isYesterday(date)) return "Ontem";
     return format(date, "EEEE", { locale: ptBR });
+  };
+
+  const handleNext = () => {
+    if (calendarView === 'day') setSelectedDate(addDays(selectedDate, 1));
+    else if (calendarView === 'week') setSelectedDate(addDays(selectedDate, 7));
+    else setCurrentDisplayMonth(addMonths(currentDisplayMonth, 1));
+  };
+
+  const handlePrev = () => {
+    if (calendarView === 'day') setSelectedDate(subDays(selectedDate, 1));
+    else if (calendarView === 'week') setSelectedDate(subDays(selectedDate, 7));
+    else setCurrentDisplayMonth(subMonths(currentDisplayMonth, 1));
+  };
+
+  const handleEditEventFromView = (event: CalendarEvent) => {
+    setEditEvent(event);
+    setIsModalOpen(true);
   };
 
   return (
@@ -177,14 +199,53 @@ export default function App() {
         <>
           {/* Header */}
         <header className="h-20 bg-white/80 backdrop-blur-md border-b border-apple-border px-8 flex items-center justify-between shrink-0 sticky top-0 z-20">
-          <div className="flex items-center gap-4">
-            <h1 className="text-xl font-semibold text-apple-text capitalize">
-              {getDayHeader(selectedDate)}
-            </h1>
-            <div className="flex bg-apple-bg rounded-lg p-1 border border-apple-border/50">
-              <span className="px-3 py-1 text-sm font-medium bg-white rounded shadow-sm text-apple-text">
-                {format(selectedDate, "d MMMM yyyy", { locale: ptBR })}
-              </span>
+          <div className="flex items-center gap-6">
+            <div className="flex items-center gap-3">
+               <div className="flex bg-apple-bg rounded-lg p-1 border border-apple-border/50">
+                  <button onClick={handlePrev} className="p-1 hover:bg-white rounded transition-colors text-apple-text-muted hover:text-apple-blue">
+                    <ChevronLeft className="w-5 h-5" />
+                  </button>
+                  <button onClick={handleNext} className="p-1 hover:bg-white rounded transition-colors text-apple-text-muted hover:text-apple-blue">
+                    <ChevronRight className="w-5 h-5" />
+                  </button>
+               </div>
+               <h1 className="text-xl font-semibold text-apple-text capitalize min-w-[120px]">
+                 {getDayHeader(selectedDate)}
+               </h1>
+            </div>
+
+            <div className="hidden lg:flex bg-apple-bg rounded-xl p-1 border border-apple-border/50">
+               <button 
+                 onClick={() => setCalendarView('day')}
+                 className={cn(
+                   "px-4 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-2",
+                   calendarView === 'day' ? "bg-white text-apple-blue shadow-sm" : "text-apple-text-muted hover:text-apple-text"
+                 )}
+               >
+                 <List className="w-3.5 h-3.5" /> Dia
+               </button>
+               <button 
+                 onClick={() => setCalendarView('week')}
+                 className={cn(
+                   "px-4 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-2",
+                   calendarView === 'week' ? "bg-white text-apple-blue shadow-sm" : "text-apple-text-muted hover:text-apple-text"
+                 )}
+               >
+                 <CalendarDays className="w-3.5 h-3.5" /> Semana
+               </button>
+               <button 
+                 onClick={() => setCalendarView('month')}
+                 className={cn(
+                   "px-4 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-2",
+                   calendarView === 'month' ? "bg-white text-apple-blue shadow-sm" : "text-apple-text-muted hover:text-apple-text"
+                 )}
+               >
+                 <Grid3X3 className="w-3.5 h-3.5" /> Mês
+               </button>
+            </div>
+            
+            <div className="hidden sm:flex bg-white rounded-lg px-3 py-1.5 border border-apple-border/50 shadow-sm text-xs font-medium text-apple-text-muted">
+              {calendarView === 'month' ? format(currentDisplayMonth, "MMMM yyyy", { locale: ptBR }) : format(selectedDate, "d 'de' MMMM yyyy", { locale: ptBR })}
             </div>
           </div>
           <div className="flex gap-2">
@@ -215,27 +276,44 @@ export default function App() {
           </div>
         </header>
 
-        {/* Events Schedule */}
-        <div className="flex-1 overflow-y-auto px-8 py-6 hidden-scrollbar">
-          {dayEvents.length === 0 ? (
-            <div className="flex flex-col items-center justify-center h-full text-apple-text-muted space-y-4">
-              <div className="w-16 h-16 rounded-full bg-apple-bg flex items-center justify-center mb-4">
-                <CalendarIcon className="w-8 h-8 text-black/20" />
-              </div>
-              <p className="text-lg font-medium">Nenhum evento neste dia</p>
-              <button 
-                onClick={() => {
-                  setEditEvent(null);
-                  setIsModalOpen(true);
-                }}
-                className="text-apple-blue font-semibold hover:underline"
-              >
-                Criar uma visita
-              </button>
-            </div>
+        {/* Events Schedule / Full Views */}
+        <div className="flex-1 overflow-hidden flex flex-col">
+          {calendarView === 'week' ? (
+            <WeekView 
+              selectedDate={selectedDate} 
+              onSelectDate={setSelectedDate} 
+              events={events} 
+              realtors={realtors} 
+              onEditEvent={handleEditEventFromView}
+            />
+          ) : calendarView === 'month' ? (
+            <MonthView 
+              currentDisplayMonth={currentDisplayMonth}
+              selectedDate={selectedDate}
+              onSelectDate={setSelectedDate}
+              events={events}
+            />
           ) : (
-            <div className="space-y-4">
-              {dayEvents.map((event) => {
+            <div className="flex-1 overflow-y-auto px-8 py-6 hidden-scrollbar">
+              {dayEvents.length === 0 ? (
+                <div className="flex flex-col items-center justify-center h-full text-apple-text-muted space-y-4">
+                  <div className="w-16 h-16 rounded-full bg-apple-bg flex items-center justify-center mb-4">
+                    <CalendarIcon className="w-8 h-8 text-black/20" />
+                  </div>
+                  <p className="text-lg font-medium">Nenhum evento neste dia</p>
+                  <button 
+                    onClick={() => {
+                      setEditEvent(null);
+                      setIsModalOpen(true);
+                    }}
+                    className="text-apple-blue font-semibold hover:underline"
+                  >
+                    Criar uma visita
+                  </button>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {dayEvents.map((event) => {
                 const realtor = realtors.find(r => r.id === event.realtorId);
                 const isExpanded = expandedEventId === event.id;
                 
@@ -389,13 +467,16 @@ export default function App() {
                     </div>
                   )}
                 </div>
-              )})}
+                );
+              })}
             </div>
           )}
         </div>
-        </>
-        )}
-      </main>
+      )}
+    </div>
+  </>
+)}
+</main>
 
       <EventModal
         isOpen={isModalOpen}
