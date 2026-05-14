@@ -1,0 +1,49 @@
+{
+  "entities": {
+    "Realtor": {
+      "title": "Realtor",
+      "description": "A real estate agent",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "name": { "type": "string" },
+        "phone": { "type": "string" },
+        "email": { "type": "string" },
+        "createdAt": { "type": "number" },
+        "updatedAt": { "type": "number" }
+      },
+      "required": ["userId", "name", "createdAt", "updatedAt"]
+    },
+    "VisitEvent": {
+      "title": "VisitEvent",
+      "description": "A scheduled visit",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "date": { "type": "string" },
+        "startTime": { "type": "string" },
+        "endTime": { "type": "string" },
+        "location": { "type": "string" },
+        "realtorId": { "type": "string" },
+        "clientName": { "type": "string" },
+        "clientPhone": { "type": "string" },
+        "clientEmail": { "type": "string" },
+        "notes": { "type": "string" },
+        "status": { "type": "string", "enum": ["scheduled", "completed", "canceled"] },
+        "createdAt": { "type": "number" },
+        "updatedAt": { "type": "number" }
+      },
+      "required": ["userId", "date", "startTime", "location", "realtorId", "clientName", "status", "createdAt", "updatedAt"]
+    }
+  },
+  "firestore": {
+    "realtors/{realtorId}": {
+      "schema": { "$ref": "Realtor" },
+      "description": "Realtors managed by the user"
+    },
+    "events/{eventId}": {
+      "schema": { "$ref": "VisitEvent" },
+      "description": "Events scheduled by the user"
+    }
+  }
+}

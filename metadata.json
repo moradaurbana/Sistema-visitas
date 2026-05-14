@@ -1,0 +1,8 @@
+{
+  "name": "Agenda Moderna",
+  "description": "Um sistema de agenda elegante com design estilo Apple e facilidade de lembretes.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

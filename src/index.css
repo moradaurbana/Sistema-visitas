@@ -1,0 +1,33 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --color-apple-bg: #F2F2F7;
+  --color-apple-sidebar: #E5E5EA;
+  --color-apple-card: #FFFFFF;
+  --color-apple-blue: #3B82F6;
+  --color-apple-red: #EF4444;
+  --color-apple-text: #1D1D1F;
+  --color-apple-text-muted: #9CA3AF;
+  --color-apple-border: #D1D1D6;
+  
+  --font-sans: ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
+}
+
+body {
+  background-color: var(--color-apple-bg);
+  color: var(--color-apple-text);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+@layer utilities {
+  .hidden-scrollbar {
+    -ms-overflow-style: none; /* IE and Edge */
+    scrollbar-width: none; /* Firefox */
+  }
+  .hidden-scrollbar::-webkit-scrollbar {
+    display: none; /* Chrome, Safari and Opera */
+  }
+}
+
