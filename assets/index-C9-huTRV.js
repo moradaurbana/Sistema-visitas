@@ -3291,13 +3291,18 @@ Sua visita foi agendada!
 
 Corretor: *${ne.corretorName}* ${C?"("+C+")":""}
 
-Obrigado!`,R=Sm("/api/send-whatsapp");fetch(R,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({phone:ne.clienteWhatsapp,message:w})}).then(k=>k.json()).then(k=>console.log("WA Client:",k)).catch(k=>console.error("WA Client Err:",k))}if(oe!=null&&oe.phone){const C=`Nova visita agendada!
+Qualquer dúvida, entre em contato!
+Obrigado!`,R=Sm("/api/send-whatsapp");console.log(`[WhatsApp] Sending to client: ${ne.clienteWhatsapp} | URL: ${R}`),fetch(R,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({phone:ne.clienteWhatsapp,message:w})}).then(async k=>{const D=await k.json();console.log("[WhatsApp] Client Result:",D)}).catch(k=>console.error("[WhatsApp] Client Error:",k))}if(oe!=null&&oe.phone){const C=`Olá *${ne.corretorName}*,
+
+Uma nova visita foi agendada!
 
 🧑 Cliente: ${ne.clienteNome}
 📞 WhatsApp: ${ne.clienteWhatsapp||"N/A"}
 📅 Data: ${ne.dataVisita}
 ⌚ Horário: ${ne.horaVisita}
-📍 Local: ${ne.endereco}`,w=Sm("/api/send-whatsapp");fetch(w,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({phone:oe.phone,message:C})}).then(R=>R.json()).then(R=>console.log("WA Realtor:",R)).catch(R=>console.error("WA Realtor Err:",R))}}else{const C=await CO(ee);let w=!1;if(C.exists()){const R=C.data();(R.dataVisita!==ne.dataVisita||R.horaVisita!==ne.horaVisita)&&(w=!0)}if(await lh(ee,ne,{merge:!0}),w&&ne.clienteWhatsapp){const R=`Sua visita foi remarcada!
+📍 Local: ${ne.endereco}
+
+Bom trabalho!`,w=Sm("/api/send-whatsapp");console.log(`[WhatsApp] Sending to realtor: ${oe.phone} | URL: ${w}`),fetch(w,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({phone:oe.phone,message:C})}).then(async R=>{const k=await R.json();console.log("[WhatsApp] Realtor Result:",k)}).catch(R=>console.error("[WhatsApp] Realtor Error:",R))}}else{const C=await CO(ee);let w=!1;if(C.exists()){const R=C.data();(R.dataVisita!==ne.dataVisita||R.horaVisita!==ne.horaVisita)&&(w=!0)}if(await lh(ee,ne,{merge:!0}),w&&ne.clienteWhatsapp){const R=`Sua visita foi remarcada!
 
 📅 Nova Data: ${ne.dataVisita}
 ⌚ Novo Horário: ${ne.horaVisita}

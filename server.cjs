@@ -25,7 +25,6 @@ var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__ge
 var import_express = __toESM(require("express"), 1);
 var import_path = __toESM(require("path"), 1);
 var import_fs = __toESM(require("fs"), 1);
-var import_cors = __toESM(require("cors"), 1);
 console.log(`[Startup] Initializing Agenda Moderna Backend...`);
 console.log(`[Startup] NODE_ENV: ${process.env.NODE_ENV}`);
 console.log(`[Startup] CWD: ${process.cwd()}`);
@@ -149,30 +148,39 @@ Voc\xEA tem uma visita em ~2h:
 async function startServer() {
   const app = (0, import_express.default)();
   const PORT = 3e3;
-  app.use((0, import_cors.default)());
-  app.options("*", (0, import_cors.default)());
+  app.use((req, res, next) => {
+    res.header("Access-Control-Allow-Origin", "*");
+    res.header("Access-Control-Allow-Methods", "GET,PUT,POST,DELETE,OPTIONS");
+    res.header("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept, Authorization, apikey");
+    if (req.method === "OPTIONS") {
+      console.log(`[CORS] Handling OPTIONS for ${req.url}`);
+      return res.status(200).end();
+    }
+    next();
+  });
   app.use(import_express.default.json());
   app.use((req, res, next) => {
     console.log(`[REQ] ${req.method} ${req.url}`);
     next();
   });
-  app.get("/health", (req, res) => res.json({ status: "alive", v: "1.3.5", prod: isProd }));
-  app.get("/api/health", (req, res) => res.json({ status: "alive", api: true, v: "1.3.5" }));
+  app.get("/health", (req, res) => res.json({ status: "alive", v: "1.3.7", prod: isProd }));
+  app.get("/api/health", (req, res) => res.json({ status: "alive", api: true }));
+  app.get("/api/ping", (req, res) => res.send("pong"));
   app.post("/api/send-whatsapp", async (req, res) => {
     const { phone, message } = req.body;
-    console.log(`[API] Send WhatsApp for phone: ${phone}`);
+    console.log(`[API] send-whatsapp hit: ${phone}`);
     const apiUrl = process.env.EVOLUTION_API_URL;
     const apiKey = process.env.EVOLUTION_API_KEY;
     const instanceName = process.env.EVOLUTION_INSTANCE_NAME;
     if (!phone || !message || !apiUrl || !apiKey || !instanceName) {
-      console.log("[API] Error: Missing config or params");
-      return res.status(400).json({ success: false, error: "Configura\xE7\xE3o ou par\xE2metros ausentes" });
-    }
-    let cleanPhone = phone.replace(/\D/g, "");
-    if (cleanPhone.length >= 10 && cleanPhone.length <= 11 && !cleanPhone.startsWith("55")) {
-      cleanPhone = "55" + cleanPhone;
+      console.error("[API] Config or params missing");
+      return res.status(400).json({ success: false, error: "Missing config" });
     }
     try {
+      let cleanPhone = phone.replace(/\D/g, "");
+      if (cleanPhone.length >= 10 && cleanPhone.length <= 11 && !cleanPhone.startsWith("55")) {
+        cleanPhone = "55" + cleanPhone;
+      }
       const response = await fetch(`${apiUrl}/message/sendText/${instanceName}`, {
         method: "POST",
         headers: { "Content-Type": "application/json", "apikey": apiKey },
@@ -183,36 +191,36 @@ async function startServer() {
         })
       });
       const responseText = await response.text();
-      let data;
+      let responseData;
       try {
-        data = JSON.parse(responseText);
+        responseData = JSON.parse(responseText);
       } catch (e) {
-        data = responseText;
+        responseData = responseText;
       }
-      console.log(`[API] Evolution API Status: ${response.status}`);
-      res.status(response.status).json({ success: response.ok, data });
+      console.log(`[API] Evolution Status: ${response.status}`);
+      res.status(response.status).json({ success: response.ok, data: responseData });
     } catch (error) {
-      console.error("[API] WhatsApp Proxy Fatal Error:", error.message);
+      console.error("[API] Fatal Error:", error.message);
       res.status(500).json({ success: false, error: error.message });
     }
   });
   const distPath = import_path.default.join(process.cwd(), "dist");
   if (isProd) {
-    console.log(`[Server] PROD MODE: Serving static files from ${distPath}`);
+    console.log(`[Server] Production Mode: Serving dist from ${distPath}`);
     app.use(import_express.default.static(distPath));
-    app.all("/api/*", (req, res) => {
-      res.status(404).json({ error: "API route not found" });
-    });
-    app.get("*", (req, res) => {
+    app.get("*", (req, res, next) => {
+      if (req.url.startsWith("/api/") || req.url.startsWith("/health")) {
+        return next();
+      }
       const indexPath = import_path.default.join(distPath, "index.html");
       if (import_fs.default.existsSync(indexPath)) {
         res.sendFile(indexPath);
       } else {
-        res.status(404).send("Production index.html missing! Please rebuild.");
+        res.status(404).send("Front-end index missing.");
       }
     });
   } else {
-    console.log("[Server] DEV MODE: Mounting Vite");
+    console.log("[Server] Development Mode: Mounting Vite");
     try {
       const { createServer: createViteServer } = await import("vite");
       const vite = await createViteServer({
@@ -221,12 +229,11 @@ async function startServer() {
       });
       app.use(vite.middlewares);
     } catch (e) {
-      console.error("[Server] FAILED to mount Vite:", e);
-      app.get("*", (req, res) => res.status(500).send("Dev server error: Vite failed to load."));
+      console.error("[Server] Vite mount failed:", e);
     }
   }
   app.listen(PORT, "0.0.0.0", () => {
-    console.log(`[Server] Agenda Moderna v1.3.5 listening on 0.0.0.0:${PORT}`);
+    console.log(`[Server] Agenda Moderna v1.3.7 listening on 0.0.0.0:${PORT}`);
     startScheduler();
   });
 }
