@@ -22,19 +22,27 @@ interface FirestoreErrorInfo {
 }
 
 const getApiUrl = (path: string) => {
+  const cleanPath = path.startsWith('/') ? path : `/${path}`;
+  
   // Se estiver rodando no github.io, use a URL absoluta do backend
   if (window.location.hostname.includes('github.io')) {
-    const cleanPath = path.startsWith('/') ? path : `/${path}`;
     const url = `${BACKEND_URL}${cleanPath}`;
     console.log(`[API Cross-Origin] Calling: ${url}`);
     return url;
   }
   
   // No ambiente de preview do AI Studio
-  const basePath = window.location.pathname.split('/api')[0].replace(/\/$/, '');
-  const cleanPath = path.startsWith('/') ? path : `/${path}`;
-  const url = `${basePath}${cleanPath}`;
+  // Se estiver na raiz, window.location.pathname é "/"
+  // Se estiver em subpasta, window.location.pathname é "/sub-pasta/"
+  let basePath = window.location.pathname;
+  if (basePath.includes('/api')) {
+    basePath = basePath.split('/api')[0];
+  }
   
+  // Remove trailing slash from basePath
+  basePath = basePath.replace(/\/$/, '');
+  
+  const url = `${basePath}${cleanPath}`;
   console.log(`[API Local] Request: ${url}`);
   return url;
 };
