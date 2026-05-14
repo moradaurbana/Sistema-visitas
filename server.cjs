@@ -26,6 +26,7 @@ var import_express = __toESM(require("express"), 1);
 var import_path = __toESM(require("path"), 1);
 var import_vite = require("vite");
 var import_fs = __toESM(require("fs"), 1);
+var import_cors = __toESM(require("cors"), 1);
 async function startScheduler() {
   try {
     const configPath = import_path.default.join(process.cwd(), "firebase-applet-config.json");
@@ -167,62 +168,42 @@ async function sendWhatsapp(phone, message) {
 async function startServer() {
   const app = (0, import_express.default)();
   const PORT = 3e3;
+  app.use((0, import_cors.default)({
+    origin: (origin, callback) => {
+      callback(null, true);
+    },
+    credentials: true,
+    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization", "apikey", "Accept", "X-Requested-With"]
+  }));
+  app.use(import_express.default.json());
   app.use((req, res, next) => {
-    const origin = req.headers.origin || "*";
-    res.setHeader("Access-Control-Allow-Origin", origin);
-    res.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS");
-    res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization, apikey, Accept, X-Requested-With");
-    res.setHeader("Access-Control-Allow-Credentials", "true");
-    res.setHeader("Access-Control-Max-Age", "86400");
-    if (req.method === "OPTIONS") {
-      console.log(`[CORS] Preflight for ${req.url} from ${origin}`);
-      return res.status(200).end();
+    if (req.url.includes("/api/")) {
+      console.log(`[CORS-Debug] ${req.method} ${req.url} - Origin: ${req.headers.origin}`);
     }
     next();
   });
-  app.use(import_express.default.json());
-  app.use((req, res, next) => {
-    console.log(`[Request] ${req.method} ${req.url} (Path: ${req.path}) from ${req.headers.origin || "no-origin"}`);
-    next();
-  });
   const healthHandler = (req, res) => {
-    res.json({
-      status: "ok",
-      time: (/* @__PURE__ */ new Date()).toISOString(),
-      url: req.url,
-      path: req.path,
-      headers: req.headers,
-      whatsappConfigured: !!(process.env.EVOLUTION_API_URL && process.env.EVOLUTION_API_KEY && process.env.EVOLUTION_INSTANCE_NAME)
-    });
+    res.json({ status: "ok", time: (/* @__PURE__ */ new Date()).toISOString(), whatsapp: !!process.env.EVOLUTION_API_URL });
   };
-  app.get("/api/health", healthHandler);
-  app.get("/health", healthHandler);
   const whatsappHandler = async (req, res) => {
-    console.log(`[WhatsApp API] Request for ${req.body?.phone} received at ${req.path}`);
+    const phone = req.body?.phone;
+    console.log(`[WhatsApp-API] Sending to ${phone}`);
     try {
-      const { phone, message } = req.body;
-      if (!phone || !message) {
-        console.log("[WhatsApp API] Missing phone or message in body");
-        return res.status(400).json({ success: false, issue: "Missing phone or message" });
-      }
+      const { message } = req.body;
       const apiUrl = process.env.EVOLUTION_API_URL;
       const apiKey = process.env.EVOLUTION_API_KEY;
       const instanceName = process.env.EVOLUTION_INSTANCE_NAME;
-      if (!apiUrl || !apiKey || !instanceName) {
-        console.error("[WhatsApp API] Credentials missing in environment variables");
-        return res.status(500).json({ success: false, issue: "WhatsApp credentials not configured on server" });
+      if (!phone || !message || !apiUrl || !apiKey || !instanceName) {
+        return res.status(400).json({ success: false, error: "Missing parameters or server configuration" });
       }
       let cleanPhone = phone.replace(/\D/g, "");
       if (cleanPhone.length >= 10 && cleanPhone.length <= 11 && !cleanPhone.startsWith("55")) {
         cleanPhone = "55" + cleanPhone;
       }
-      console.log(`[WhatsApp API] Forwarding to Evolution API (${cleanPhone})...`);
       const response = await fetch(`${apiUrl}/message/sendText/${instanceName}`, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "apikey": apiKey
-        },
+        headers: { "Content-Type": "application/json", "apikey": apiKey },
         body: JSON.stringify({
           number: cleanPhone,
           options: { delay: 1200, presence: "composing" },
@@ -230,29 +211,18 @@ async function startServer() {
         })
       });
       const data = await response.json();
-      if (!response.ok) {
-        console.error(`[WhatsApp API] Evolution API error:`, data);
-        return res.status(response.status).json({ success: false, details: data });
-      }
-      console.log(`[WhatsApp API] Message sent successfully to ${cleanPhone}`);
-      res.json({ success: true, data });
+      res.status(response.status).json({ success: response.ok, data });
     } catch (error) {
-      console.error("[WhatsApp API] Internal Error:", error);
-      res.status(500).json({ success: false, issue: error.message });
+      console.error("[WhatsApp-API] Fatal error:", error);
+      res.status(500).json({ success: false, error: error.message });
     }
   };
-  const handlerWrapper = (req, res) => {
-    whatsappHandler(req, res);
-  };
-  app.post("/api/send-whatsapp", handlerWrapper);
-  app.post("/api/send-whatsapp/", handlerWrapper);
-  app.post(/.*\/api\/send-whatsapp\/?$/, handlerWrapper);
-  app.get(/.*\/api\/send-whatsapp\/?$/, (req, res) => {
-    res.json({ message: "WhatsApp endpoint is ready. Use POST to send messages.", path: req.path, url: req.url });
-  });
   app.get("/api/health", healthHandler);
-  app.get("/health", healthHandler);
-  app.get(/.*\/api\/health$/, healthHandler);
+  app.post("/api/send-whatsapp", whatsappHandler);
+  app.all("*/api/send-whatsapp", (req, res) => {
+    if (req.method === "POST") return whatsappHandler(req, res);
+    res.json({ status: "ready" });
+  });
   if (process.env.NODE_ENV !== "production") {
     const vite = await (0, import_vite.createServer)({
       server: { middlewareMode: true },
@@ -262,18 +232,14 @@ async function startServer() {
   } else {
     const distPath = import_path.default.join(process.cwd(), "dist");
     app.use(import_express.default.static(distPath));
-    app.get("*", (req, res) => {
+    app.get("*", (req, res, next) => {
+      if (req.url.startsWith("/api/")) return next();
       res.sendFile(import_path.default.join(distPath, "index.html"));
     });
   }
-  app.use((req, res) => {
-    const origin = req.headers.origin || "*";
-    res.header("Access-Control-Allow-Origin", origin);
-    res.header("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS");
-    res.header("Access-Control-Allow-Headers", "Content-Type, Authorization, apikey, Accept, X-Requested-With");
-    res.header("Access-Control-Allow-Credentials", "true");
-    console.log(`[404] No match for ${req.method} ${req.url}`);
-    res.status(404).json({ error: "Route not found", method: req.method, url: req.url, path: req.path });
+  app.all("/api/*", (req, res) => {
+    console.log(`[API-404] No route for ${req.method} ${req.url}`);
+    res.status(404).json({ error: "API Route Not Found", url: req.url, method: req.method });
   });
   app.listen(PORT, "0.0.0.0", () => {
     console.log(`Server running on http://localhost:${PORT}`);
