@@ -2,6 +2,7 @@ import express from 'express';
 import path from 'path';
 import { createServer as createViteServer } from 'vite';
 import fs from 'fs';
+import cors from 'cors';
 
 async function startScheduler() {
   try {
@@ -18,7 +19,12 @@ async function startScheduler() {
     const baseUrl = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/${dbId}/documents`;
 
     setInterval(async () => {
+      console.log(`[Scheduler] Heartbeat at ${new Date().toISOString()}`);
       try {
+        if (!process.env.EVOLUTION_API_URL || !process.env.EVOLUTION_API_KEY || !process.env.EVOLUTION_INSTANCE_NAME) {
+          console.log("[Scheduler] Missing WhatsApp configuration in environment variables. Reminders will not be sent.");
+          return;
+        }
         // Fetch all appointments
         const res = await fetch(`${baseUrl}/appointments?key=${apiKey}`);
         if (!res.ok) {
@@ -141,6 +147,7 @@ async function startServer() {
   const app = express();
   const PORT = 3000;
 
+  app.use(cors()); // Enable CORS for ALL origins (simplest for now)
   app.use(express.json());
 
   // Evolution API Whatsapp Route
