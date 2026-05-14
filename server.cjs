@@ -26,7 +26,6 @@ var import_express = __toESM(require("express"), 1);
 var import_path = __toESM(require("path"), 1);
 var import_vite = require("vite");
 var import_fs = __toESM(require("fs"), 1);
-var import_cors = __toESM(require("cors"), 1);
 async function startScheduler() {
   try {
     const configPath = import_path.default.join(process.cwd(), "firebase-applet-config.json");
@@ -168,33 +167,32 @@ async function sendWhatsapp(phone, message) {
 async function startServer() {
   const app = (0, import_express.default)();
   const PORT = 3e3;
+  app.all("*", (req, res, next) => {
+    const origin = req.headers.origin || "*";
+    res.header("Access-Control-Allow-Origin", origin);
+    res.header("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS");
+    res.header("Access-Control-Allow-Headers", "Content-Type, Authorization, apikey, Accept, X-Requested-With");
+    res.header("Access-Control-Allow-Credentials", "true");
+    if (req.method === "OPTIONS") {
+      return res.status(200).end();
+    }
+    next();
+  });
+  app.use(import_express.default.json());
   app.use((req, res, next) => {
     console.log(`[Server] ${req.method} ${req.url} from ${req.headers.origin}`);
     next();
   });
-  app.use((0, import_cors.default)({
-    origin: "*",
-    methods: ["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization", "apikey"],
-    credentials: true
-  }));
-  app.options("*", (req, res) => {
-    res.header("Access-Control-Allow-Origin", "*");
-    res.header("Access-Control-Allow-Methods", "GET, POST, PATCH, DELETE, OPTIONS");
-    res.header("Access-Control-Allow-Headers", "Content-Type, Authorization, apikey");
-    res.sendStatus(200);
-  });
-  app.use(import_express.default.json());
   const healthHandler = (req, res) => {
     res.json({
       status: "ok",
+      time: (/* @__PURE__ */ new Date()).toISOString(),
       whatsappConfigured: !!(process.env.EVOLUTION_API_URL && process.env.EVOLUTION_API_KEY && process.env.EVOLUTION_INSTANCE_NAME)
     });
   };
-  app.get("/api/health", healthHandler);
-  app.get("/api/health/", healthHandler);
-  app.get("/Sistema-visitas/api/health", healthHandler);
+  app.get(["/api/health", "/api/health/", "*/api/health"], healthHandler);
   const whatsappHandler = async (req, res) => {
+    console.log(`[Server] Handling WhatsApp request for ${req.body.phone}`);
     try {
       const { phone, message } = req.body;
       const apiUrl = process.env.EVOLUTION_API_URL;
@@ -236,10 +234,8 @@ async function startServer() {
       res.status(500).json({ success: false, issue: error.message });
     }
   };
-  app.post("/api/send-whatsapp", whatsappHandler);
-  app.post("/api/send-whatsapp/", whatsappHandler);
-  app.post("/Sistema-visitas/api/send-whatsapp", whatsappHandler);
-  app.post("/Sistema-visitas/api/send-whatsapp/", whatsappHandler);
+  app.post(["/api/send-whatsapp", "/api/send-whatsapp/", "*/api/send-whatsapp"], whatsappHandler);
+  app.get(["/api/send-whatsapp", "*/api/send-whatsapp"], (req, res) => res.json({ message: "Use POST to send messages" }));
   if (process.env.NODE_ENV !== "production") {
     const vite = await (0, import_vite.createServer)({
       server: { middlewareMode: true },
