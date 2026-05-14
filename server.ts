@@ -157,53 +157,37 @@ async function startServer() {
   const app = express();
   const PORT = 3000;
 
-  // 1. ABSOLUTELY FIRST: Diagnostic Log & Minimal Health Check
-  // This ensures we can verify the server is alive even if other middleware fails
-  app.get('/health', (req, res) => res.json({ status: "alive", v: "1.1.0" }));
-  app.get('/api/health', (req, res) => res.json({ status: "alive", api: true, v: "1.1.0" }));
+  // 1. GLOBAL CORS (Including OPTIONS handling)
+  app.use(cors({
+    origin: true, // Echo origin
+    credentials: true,
+    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS", "HEAD"],
+    allowedHeaders: ["Content-Type", "Authorization", "apikey", "Accept", "Origin", "X-Requested-With"]
+  }));
 
+  // Log incoming requests for debugging
   app.use((req, res, next) => {
     console.log(`[REQ] ${new Date().toISOString()} | ${req.method} ${req.url}`);
-    
-    // Manual CORS
-    const origin = req.headers.origin || "*";
-    res.setHeader("Access-Control-Allow-Origin", origin);
-    res.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS, HEAD");
-    res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization, apikey, Accept, Origin, X-Requested-With");
-    res.setHeader("Access-Control-Allow-Credentials", "true");
-    
-    if (req.method === "OPTIONS") {
-      return res.status(200).end();
-    }
     next();
   });
 
-  // 2. Body Parsing (Early)
-  app.use(express.json());
-
-  // 3. Robust Health check registration
+  // 2. HEALTH & DIAGNOSTIC ROUTES (Early)
   const healthCheck = (req: any, res: any) => {
     res.json({ 
       status: "ok", 
-      v: "1.1.0", 
+      v: "1.1.2", 
       env: process.env.NODE_ENV,
-      time: new Date().toISOString(),
-      url: req.url
+      time: new Date().toISOString()
     });
   };
 
-  app.all('/api', (req, res) => {
-    res.json({
-      message: "Agenda Moderna API",
-      endpoints: ["/api/health", "/api/send-whatsapp", "/health"],
-      v: "1.1.1"
-    });
-  });
+  app.get(['/health', '/api/health', '/api/health-check'], healthCheck);
+  app.all('/api/status', healthCheck);
 
-  app.get('/api/health-check', healthCheck);
-  app.get('/api/status', healthCheck);
+  // 3. Body Parsing
+  app.use(express.json());
 
-  // 4. API HANDLERS
+  // 4. API HANDLERS & REGISTRATION
   const whatsappHandler = async (req: express.Request, res: express.Response) => {
     const { phone, message } = req.body;
     console.log(`[WhatsApp-API] Processing request for phone: ${phone}`);
@@ -263,11 +247,13 @@ async function startServer() {
     }
   };
 
-  // 5. ROUTE REGISTRATION (API)
   app.post(['/api/send-whatsapp', '/api/send-whatsapp/'], whatsappHandler);
-  app.post(/.*\/api\/send-whatsapp\/?$/, whatsappHandler); // Broader match
+  app.all('/api/send-whatsapp*', (req, res, next) => {
+    if (req.method === 'POST') return whatsappHandler(req, res);
+    next();
+  });
 
-  // 6. STATIC FILES & SPA FALLBACK
+  // 5. STATIC FILES & SPA FALLBACK
   const isProduction = process.env.NODE_ENV === "production";
   
   if (!isProduction) {

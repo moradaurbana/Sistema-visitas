@@ -24,26 +24,22 @@ interface FirestoreErrorInfo {
 const getApiUrl = (path: string) => {
   const cleanPath = path.startsWith('/') ? path : `/${path}`;
   
-  // Se estiver rodando no github.io, use a URL absoluta do backend
-  if (window.location.hostname.includes('github.io')) {
+  // Se estiver rodando no github.io ou outro domínio externo, use a URL absoluta do backend
+  if (window.location.hostname !== 'localhost' && 
+      !window.location.hostname.includes('ais-dev-') && 
+      !window.location.hostname.includes('ais-pre-')) {
     const url = `${BACKEND_URL}${cleanPath}`;
-    console.log(`[API Cross-Origin] Calling: ${url}`);
+    console.log(`[API Cross-Origin] Target: ${url} | Origin: ${window.location.hostname}`);
     return url;
   }
   
-  // No ambiente de preview do AI Studio
-  // Se estiver na raiz, window.location.pathname é "/"
-  // Se estiver em subpasta, window.location.pathname é "/sub-pasta/"
-  let basePath = window.location.pathname;
-  if (basePath.includes('/api')) {
-    basePath = basePath.split('/api')[0];
-  }
+  // No ambiente local ou preview do AI Studio
+  let basePath = window.location.origin;
   
-  // Remove trailing slash from basePath
-  basePath = basePath.replace(/\/$/, '');
-  
+  // Se estivermos no preview, as vezes o origin é suficiente, as vezes precisamos do pathname
+  // Mas no Cloud Run v2 (AI Studio Build), o origin já aponta para o lugar certo
   const url = `${basePath}${cleanPath}`;
-  console.log(`[API Local] Request: ${url}`);
+  console.log(`[API Router] Request: ${url}`);
   return url;
 };
 
