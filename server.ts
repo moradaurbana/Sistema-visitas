@@ -157,11 +157,21 @@ async function startServer() {
   const app = express();
   const PORT = 3000;
 
-  app.use(cors()); // Enable CORS for ALL origins (simplest for now)
+  // Logging middleware
+  app.use((req, res, next) => {
+    console.log(`[Server] ${req.method} ${req.url} from ${req.headers.origin}`);
+    next();
+  });
+
+  app.use(cors({
+    origin: '*', // For now allow all, but could be specific
+    methods: ['GET', 'POST', 'PATCH', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization']
+  }));
   app.use(express.json());
 
 // Evolution API Whatsapp Route
-  app.post('/api/send-whatsapp', async (req, res) => {
+  app.post(['/api/send-whatsapp', '/api/send-whatsapp/'], async (req, res) => {
     try {
       const { phone, message } = req.body;
       

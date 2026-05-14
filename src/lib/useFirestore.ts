@@ -24,8 +24,11 @@ interface FirestoreErrorInfo {
 const getApiUrl = (path: string) => {
   // If running on github.io, use absolute backend URL
   if (window.location.hostname.includes('github.io')) {
-    return `${BACKEND_URL}${path}`;
+    const url = `${BACKEND_URL}${path}`;
+    console.log(`[API] calling remote backend: ${url}`);
+    return url;
   }
+  console.log(`[API] calling local backend: ${path}`);
   return path;
 };
 
@@ -179,28 +182,42 @@ export function useFirestoreData(user: User | null) {
 
           const message = `Olá *${payload.clienteNome}*,\n\nSua visita foi agendada!\n\n📅 Data: ${payload.dataVisita}\n⌚ Horário: ${payload.horaVisita}\n📍 Endereço: ${payload.endereco}\n\nSeu corretor(a) é:\n${corretorInfo}\n\nQualquer dúvida, entre em contato!\nObrigado!`;
           
-          fetch(getApiUrl('/api/send-whatsapp'), {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              phone: payload.clienteWhatsapp,
-              message: message
-            })
-          }).catch(err => console.error("Failed to send WhatsApp notification", err));
+          try {
+            console.log(`[WhatsApp] Sending to client: ${payload.clienteWhatsapp}`);
+            const response = await fetch(getApiUrl('/api/send-whatsapp'), {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                phone: payload.clienteWhatsapp,
+                message: message
+              })
+            });
+            const result = await response.json();
+            console.log("[WhatsApp] Client notification result:", result);
+          } catch (err) {
+            console.error("Failed to send WhatsApp notification", err);
+          }
         }
 
         // Enviar WhatsApp para o corretor avisando do agendamento
         if (realtorInfo?.phone) {
           const corretorMessage = `Olá *${payload.corretorNome}*,\n\nUma nova visita foi agendada para você!\n\n🧑 Cliente: ${payload.clienteNome}\n📞 Contato: ${payload.clienteWhatsapp || 'Não informado'}\n📅 Data: ${payload.dataVisita}\n⌚ Horário: ${payload.horaVisita}\n📍 Endereço: ${payload.endereco}\n\nBom trabalho!`;
           
-          fetch(getApiUrl('/api/send-whatsapp'), {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              phone: realtorInfo.phone,
-              message: corretorMessage
-            })
-          }).catch(err => console.error("Failed to send WhatsApp to corretor", err));
+          try {
+            console.log(`[WhatsApp] Sending to realtor: ${realtorInfo.phone}`);
+            const response = await fetch(getApiUrl('/api/send-whatsapp'), {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                phone: realtorInfo.phone,
+                message: corretorMessage
+              })
+            });
+            const result = await response.json();
+            console.log("[WhatsApp] Realtor notification result:", result);
+          } catch (err) {
+            console.error("Failed to send WhatsApp to corretor", err);
+          }
         }
 
       } else {
@@ -221,20 +238,34 @@ export function useFirestoreData(user: User | null) {
           const finalClientPhone = payload.clienteWhatsapp || oldClientPhone;
           if (finalClientPhone) {
             const clientMsg = `Olá *${payload.clienteNome}*,\n\nSua visita foi remarcada!\n\n📅 Nova Data: ${payload.dataVisita}\n⌚ Novo Horário: ${payload.horaVisita}\n📍 Endereço: ${payload.endereco}\n\nQualquer dúvida, entre em contato!\nObrigado!`;
-            fetch(getApiUrl('/api/send-whatsapp'), {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ phone: finalClientPhone, message: clientMsg })
-            }).catch(console.error);
+            try {
+              console.log(`[WhatsApp] Sending rescheduling to client: ${finalClientPhone}`);
+              const response = await fetch(getApiUrl('/api/send-whatsapp'), {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ phone: finalClientPhone, message: clientMsg })
+              });
+              const result = await response.json();
+              console.log("[WhatsApp] Client rescheduling notification result:", result);
+            } catch (err) {
+              console.error("Failed to send WhatsApp rescheduling to client", err);
+            }
           }
 
           if (realtorInfo?.phone) {
              const realtorMsg = `Olá *${payload.corretorNome}*,\n\nA visita de *${payload.clienteNome}* foi remarcada!\n\n📅 Nova Data: ${payload.dataVisita}\n⌚ Novo Horário: ${payload.horaVisita}\n📍 Endereço: ${payload.endereco}\n\nBom trabalho!`;
-             fetch(getApiUrl('/api/send-whatsapp'), {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ phone: realtorInfo.phone, message: realtorMsg })
-            }).catch(console.error);
+             try {
+               console.log(`[WhatsApp] Sending rescheduling to realtor: ${realtorInfo.phone}`);
+               const response = await fetch(getApiUrl('/api/send-whatsapp'), {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ phone: realtorInfo.phone, message: realtorMsg })
+              });
+              const result = await response.json();
+              console.log("[WhatsApp] Realtor rescheduling notification result:", result);
+             } catch (err) {
+               console.error("Failed to send WhatsApp rescheduling to realtor", err);
+             }
           }
         }
       }
