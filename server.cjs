@@ -174,12 +174,18 @@ async function startServer() {
   });
   app.use((0, import_cors.default)({
     origin: "*",
-    // For now allow all, but could be specific
     methods: ["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization"]
+    allowedHeaders: ["Content-Type", "Authorization", "apikey"]
   }));
+  app.options("*", (0, import_cors.default)());
   app.use(import_express.default.json());
-  app.post(["/api/send-whatsapp", "/api/send-whatsapp/"], async (req, res) => {
+  app.get("/api/health", (req, res) => {
+    res.json({
+      status: "ok",
+      whatsappConfigured: !!(process.env.EVOLUTION_API_URL && process.env.EVOLUTION_API_KEY && process.env.EVOLUTION_INSTANCE_NAME)
+    });
+  });
+  const whatsappHandler = async (req, res) => {
     try {
       const { phone, message } = req.body;
       const apiUrl = process.env.EVOLUTION_API_URL;
@@ -187,7 +193,10 @@ async function startServer() {
       const instanceName = process.env.EVOLUTION_INSTANCE_NAME;
       if (!apiUrl || !apiKey || !instanceName) {
         console.log("[WhatsApp] Attempted to send but credentials are missing in Environment Variables.");
-        throw new Error("Evolution API environment variables are not configured. Please set them in Settings > Environment Variables.");
+        return res.status(400).json({
+          success: false,
+          issue: "Evolution API environment variables are not configured. Please set them in Settings > Environment Variables."
+        });
       }
       const endpoint = `${apiUrl}/message/sendText/${instanceName}`;
       let cleanPhone = phone.replace(/\D/g, "");
@@ -213,7 +222,7 @@ async function startServer() {
       if (!response.ok) {
         const errInfo = await response.text();
         console.error(`[WhatsApp] Evolution API error for ${cleanPhone}:`, errInfo);
-        throw new Error(`Evolution API error: ${response.status} - ${errInfo}`);
+        return res.status(response.status).json({ success: false, issue: `Evolution API error: ${response.status}`, details: errInfo });
       }
       const data = await response.json();
       console.log(`[WhatsApp] Success sending to ${cleanPhone}`);
@@ -222,6 +231,21 @@ async function startServer() {
       console.log("WhatsApp Send Result:", String(error).replace(/error/gi, "issue"));
       res.status(500).json({ success: false, issue: error.message });
     }
+  };
+  const apiPaths = [
+    "/api/send-whatsapp",
+    "/api/send-whatsapp/",
+    "/Sistema-visitas/api/send-whatsapp",
+    "/Sistema-visitas/api/send-whatsapp/"
+  ];
+  apiPaths.forEach((path2) => {
+    app.post(path2, whatsappHandler);
+  });
+  app.get(["/api/health", "/Sistema-visitas/api/health"], (req, res) => {
+    res.json({
+      status: "ok",
+      whatsappConfigured: !!(process.env.EVOLUTION_API_URL && process.env.EVOLUTION_API_KEY && process.env.EVOLUTION_INSTANCE_NAME)
+    });
   });
   if (process.env.NODE_ENV !== "production") {
     const vite = await (0, import_vite.createServer)({
