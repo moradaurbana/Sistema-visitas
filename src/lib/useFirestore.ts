@@ -22,16 +22,7 @@ interface FirestoreErrorInfo {
 }
 
 const getApiUrl = (path: string) => {
-  const cleanPath = path.startsWith('/') ? path : `/${path}`;
-  
-  // Use absolute URL for the shared app background API when external
-  if (window.location.hostname !== 'localhost' && 
-      !window.location.hostname.includes('ais-dev-') && 
-      !window.location.hostname.includes('ais-pre-')) {
-    return `${BACKEND_URL}${cleanPath}`;
-  }
-  
-  return `${window.location.origin}${cleanPath}`;
+  return path.startsWith('/') ? path : `/${path}`;
 };
 
 export function handleFirestoreError(error: unknown, operationType: OperationType, path: string | null, authUser: User | null) {
