@@ -35,6 +35,9 @@ jobs:
           VITE_FIREBASE_APP_ID: ${{ secrets.VITE_FIREBASE_APP_ID }}
           VITE_FIREBASE_MEASUREMENT_ID: ${{ secrets.VITE_FIREBASE_MEASUREMENT_ID }}
           VITE_FIREBASE_DATABASE_ID: ${{ secrets.VITE_FIREBASE_DATABASE_ID }}
+          VITE_EVOLUTION_API_URL: ${{ secrets.VITE_EVOLUTION_API_URL }}
+          VITE_EVOLUTION_API_KEY: ${{ secrets.VITE_EVOLUTION_API_KEY }}
+          VITE_EVOLUTION_INSTANCE_NAME: ${{ secrets.VITE_EVOLUTION_INSTANCE_NAME }}
 
       - name: Deploy
         uses: JamesIves/github-pages-deploy-action@v4

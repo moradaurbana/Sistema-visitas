@@ -34,6 +34,45 @@ const getApiUrl = (path: string) => {
   return `${window.location.origin}${cleanPath}`;
 };
 
+async function sendWhatsappDirectly(phone: string, message: string) {
+  const apiUrl = import.meta.env.VITE_EVOLUTION_API_URL;
+  const apiKey = import.meta.env.VITE_EVOLUTION_API_KEY;
+  const instanceName = import.meta.env.VITE_EVOLUTION_INSTANCE_NAME;
+
+  if (!apiUrl || !apiKey || !instanceName) {
+    console.error("[WhatsApp] Missing Evolution API credentials. Please set VITE_EVOLUTION_API_URL, VITE_EVOLUTION_API_KEY, and VITE_EVOLUTION_INSTANCE_NAME in your GitHub Secrets or environment variables to enable direct client-side sending.");
+    return;
+  }
+
+  let cleanPhone = phone.replace(/\D/g, "");
+  if (cleanPhone.length >= 10 && cleanPhone.length <= 11 && !cleanPhone.startsWith("55")) {
+    cleanPhone = "55" + cleanPhone;
+  }
+
+  try {
+    const response = await fetch(`${apiUrl}/message/sendText/${instanceName}`, {
+      method: "POST",
+      headers: { 
+        "Content-Type": "application/json", 
+        "apikey": apiKey 
+      },
+      body: JSON.stringify({
+        number: cleanPhone,
+        options: { delay: 1200, presence: "composing" },
+        text: message
+      })
+    });
+
+    if (!response.ok) {
+       console.error(`[WhatsApp] Evolution API HTTP error! status: ${response.status}`);
+    } else {
+       console.log(`[WhatsApp] Message successfully sent to ${cleanPhone}`);
+    }
+  } catch (error: any) {
+    console.error("[WhatsApp] Evolution API Request Failed:", error.message || error);
+  }
+}
+
 export function handleFirestoreError(error: unknown, operationType: OperationType, path: string | null, authUser: User | null) {
   const errInfo: FirestoreErrorInfo = {
     error: error instanceof Error ? error.message : String(error),
@@ -178,43 +217,15 @@ export function useFirestoreData(user: User | null) {
         if (payload.clienteWhatsapp) {
           const realtorPhone = realtorInfo?.phone || '';
           const message = `Olá *${payload.clienteNome}*,\n\nSua visita foi agendada!\n\n📅 Data: ${payload.dataVisita}\n⌚ Horário: ${payload.horaVisita}\n📍 Endereço: ${payload.endereco}\n\nCorretor: *${payload.corretorName}* ${realtorPhone ? '(' + realtorPhone + ')' : ''}\n\nQualquer dúvida, entre em contato!\nObrigado!`;
-          const targetUrl = getApiUrl('/api/send-whatsapp');
-          console.log(`[WhatsApp] Sending to client: ${payload.clienteWhatsapp} | URL: ${targetUrl}`);
           
-          fetch(targetUrl, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ 
-              phone: payload.clienteWhatsapp, 
-              message 
-            })
-          })
-          .then(async r => {
-             const res = await r.json();
-             console.log("[WhatsApp] Client Result:", res);
-          })
-          .catch(e => console.error("[WhatsApp] Client Error:", e));
+          sendWhatsappDirectly(payload.clienteWhatsapp, message);
         }
 
         // WhatsApp to Realtor
         if (realtorInfo?.phone) {
           const realtorMsg = `Olá *${payload.corretorName}*,\n\nUma nova visita foi agendada!\n\n🧑 Cliente: ${payload.clienteNome}\n📞 WhatsApp: ${payload.clienteWhatsapp || 'N/A'}\n📅 Data: ${payload.dataVisita}\n⌚ Horário: ${payload.horaVisita}\n📍 Local: ${payload.endereco}\n\nBom trabalho!`;
-          const targetUrl = getApiUrl('/api/send-whatsapp');
-          console.log(`[WhatsApp] Sending to realtor: ${realtorInfo.phone} | URL: ${targetUrl}`);
           
-          fetch(targetUrl, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ 
-              phone: realtorInfo.phone, 
-              message: realtorMsg 
-            })
-          })
-          .then(async r => {
-             const res = await r.json();
-             console.log("[WhatsApp] Realtor Result:", res);
-          })
-          .catch(e => console.error("[WhatsApp] Realtor Error:", e));
+          sendWhatsappDirectly(realtorInfo.phone, realtorMsg);
         }
       } else {
         const existingDoc = await getDoc(ref);
@@ -226,12 +237,7 @@ export function useFirestoreData(user: User | null) {
         await setDoc(ref, payload, { merge: true });
         if (dateChanged && payload.clienteWhatsapp) {
            const message = `Sua visita foi remarcada!\n\n📅 Nova Data: ${payload.dataVisita}\n⌚ Novo Horário: ${payload.horaVisita}\n📍 Local: ${payload.endereco}`;
-           const targetUrl = getApiUrl('/api/send-whatsapp');
-           fetch(targetUrl, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ phone: payload.clienteWhatsapp, message })
-          }).catch(() => {});
+           sendWhatsappDirectly(payload.clienteWhatsapp, message);
         }
       }
     } catch (e) {
